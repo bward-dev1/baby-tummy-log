@@ -16,20 +16,20 @@
 # `add_library(yuzu-ios SHARED ...)` plus MACOSX_FRAMEWORK_* properties -- but that's a
 # decision to make once there's an actual app target and device to validate it on.
 
-add_library(yuzu-ios STATIC
+add_library(aetheremu-ios STATIC
     emu_window/emu_window.h
     emu_window/emu_window.mm
     native.h
     native.mm
 )
 
-target_link_libraries(yuzu-ios PRIVATE audio_core common core input_common frontend_common video_core)
+target_link_libraries(aetheremu-ios PRIVATE audio_core common core input_common frontend_common video_core)
 
 # PLATFORM_LIBRARIES is populated by the top-level CMakeLists.txt's `if (IOS)` framework
 # block (Metal, UIKit, CoreVideo, CoreMedia, Security, UniformTypeIdentifiers, Foundation).
 # Reuse it instead of re-declaring find_library() calls here.
-target_link_libraries(yuzu-ios PRIVATE ${PLATFORM_LIBRARIES})
+target_link_libraries(aetheremu-ios PRIVATE ${PLATFORM_LIBRARIES})
 
-target_compile_options(yuzu-ios PRIVATE -fobjc-arc)
+target_compile_options(aetheremu-ios PRIVATE -fobjc-arc)
 
-set(CPACK_PACKAGE_EXECUTABLES ${CPACK_PACKAGE_EXECUTABLES} yuzu-ios)
+set(CPACK_PACKAGE_EXECUTABLES ${CPACK_PACKAGE_EXECUTABLES} aetheremu-ios)
