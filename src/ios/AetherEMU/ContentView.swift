@@ -5,6 +5,11 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ContentView: View {
+    // nil until the user picks one (ThemePickerView) -- entirely reshapes the home
+    // screen once set, per-theme layouts in HomeView (Rail) vs. DockHomeView (Dock).
+    @AppStorage("aetheremu.appTheme") private var storedTheme: String?
+
+    @State private var games: [Game] = []
     @State private var isPickingGame = false
     @State private var isRunning = false
     @State private var lastError: String?
@@ -18,65 +23,91 @@ struct ContentView: View {
         UTType(filenameExtension: "nca"),
     ].compactMap { $0 }
 
+    private var theme: AppTheme? {
+        storedTheme.flatMap(AppTheme.init(rawValue:))
+    }
+
     var body: some View {
         ZStack {
             if isRunning {
                 MetalView()
                     .ignoresSafeArea()
-            } else {
-                Color.black.ignoresSafeArea()
-            }
-
-            VStack {
-                Spacer()
-                if !isRunning {
-                    VStack(spacing: 12) {
-                        Text("AetherEMU")
-                            .font(.largeTitle.bold())
-                            .foregroundStyle(.white)
-                        Button("Load Game...") {
-                            isPickingGame = true
-                        }
-                        .buttonStyle(.borderedProminent)
-                        if let lastError {
-                            Text(lastError)
-                                .font(.footnote)
-                                .foregroundStyle(.red)
+                    .overlay(alignment: .topTrailing) {
+                        Button {
+                            AetherBridge.shared().pause()
+                            isRunning = false
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.title2)
+                                .foregroundStyle(.white.opacity(0.7))
+                                .padding()
                         }
                     }
-                    .padding(24)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+            } else if let theme {
+                switch theme {
+                case .rail:
+                    HomeView(
+                        games: $games,
+                        onPlay: loadGame,
+                        onImportTapped: { isPickingGame = true },
+                        onChangeTheme: { storedTheme = nil }
+                    )
+                case .dock:
+                    DockHomeView(
+                        games: $games,
+                        onPlay: loadGame,
+                        onImportTapped: { isPickingGame = true },
+                        onChangeTheme: { storedTheme = nil }
+                    )
                 }
-                Spacer()
+            } else {
+                ThemePickerView(onSelect: { storedTheme = $0.rawValue })
+            }
+
+            if let lastError {
+                VStack {
+                    Spacer()
+                    Text(lastError)
+                        .font(.footnote)
+                        .foregroundStyle(.white)
+                        .padding(10)
+                        .background(.red.opacity(0.8), in: RoundedRectangle(cornerRadius: 10))
+                        .padding(.bottom, 24)
+                }
             }
         }
         .fileImporter(isPresented: $isPickingGame, allowedContentTypes: Self.gameContentTypes) { result in
             switch result {
             case .success(let url):
-                loadGame(at: url)
+                addAndSelect(url: url)
             case .failure(let error):
                 lastError = error.localizedDescription
             }
         }
     }
 
-    private func loadGame(at url: URL) {
+    private func addAndSelect(url: URL) {
+        let game = Game(title: url.deletingPathExtension().lastPathComponent, path: url)
+        games.append(game)
+    }
+
+    private func loadGame(_ game: Game) {
         // NX game files live outside the app sandbox until picked, so a security-scoped
         // access grant is required before the C++ side can open the path -- see
         // AetherBridge.mm's TODO on filepath handling going through NSURL bookmarks for
         // the longer-term (re-open-without-repicking) story.
-        guard url.startAccessingSecurityScopedResource() else {
-            lastError = "Couldn't access the selected file."
+        guard game.path.startAccessingSecurityScopedResource() else {
+            lastError = "Couldn't access \(game.title)."
             return
         }
-        defer { url.stopAccessingSecurityScopedResource() }
+        defer { game.path.stopAccessingSecurityScopedResource() }
 
-        let result = AetherBridge.shared().loadGame(atPath: url.path)
+        let result = AetherBridge.shared().loadGame(atPath: game.path.path)
         if result == .success {
             isRunning = true
             lastError = nil
         } else {
-            lastError = "Failed to load game."
+            lastError = "Failed to load \(game.title)."
         }
     }
 }

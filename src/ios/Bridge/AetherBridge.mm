@@ -5,6 +5,8 @@
 
 #include "ios/native.h"
 
+#include <os/lock.h>
+
 // native.h only forward-declares `struct AetherNativeSurface;` (deliberately opaque so
 // that header has zero Objective-C dependency and stays includable from plain C++ TUs
 // -- see its comment). This is the one place it's actually defined, wrapping the
@@ -12,12 +14,22 @@
 // today (see emu_window.h's TODOs), so no other translation unit needs this definition
 // yet -- when Metal rendering is wired up, whatever reads the layer to build a
 // CAMetalDrawable will need to move into an .mm file that includes this header too.
+//
+// `layer` is a strong (ARC-retaining) reference, not __unsafe_unretained -- this struct
+// lives inside AetherBridge, a process-lifetime singleton, so an unsafe_unretained field
+// would outlive the CAMetalLayer it points to the moment the hosting view (MetalHostView,
+// MetalView.swift) is torn down, since that view is the layer's only other owner.
+// detachMetalLayer below clears it explicitly before that happens. Access is guarded by
+// _surfaceLock since the emulation engine may eventually read this from its own queue
+// (see EmuWindow_iOS's TODOs) while the main thread calls attachMetalLayer/
+// detachMetalLayer during ordinary view lifecycle events.
 struct AetherNativeSurface {
-    CAMetalLayer *__unsafe_unretained layer;
+    CAMetalLayer *layer;
 };
 
 @implementation AetherBridge {
     AetherNativeSurface _surface;
+    os_unfair_lock _surfaceLock;
     dispatch_queue_t _emulationQueue;
 }
 
@@ -34,14 +46,23 @@ struct AetherNativeSurface {
     self = [super init];
     if (self) {
         _emulationQueue = dispatch_queue_create("dev.aetheremu.emulation", DISPATCH_QUEUE_SERIAL);
+        _surfaceLock = OS_UNFAIR_LOCK_INIT;
     }
     return self;
 }
 
 - (void)attachMetalLayer:(CAMetalLayer *)layer {
+    os_unfair_lock_lock(&_surfaceLock);
     _surface.layer = layer;
+    os_unfair_lock_unlock(&_surfaceLock);
     EmulationSession::GetInstance().SetNativeSurface(&_surface);
     EmulationSession::GetInstance().SurfaceChanged();
+}
+
+- (void)detachMetalLayer {
+    os_unfair_lock_lock(&_surfaceLock);
+    _surface.layer = nil;
+    os_unfair_lock_unlock(&_surfaceLock);
 }
 
 - (AetherLoadResult)loadGameAtPath:(NSString *)path {

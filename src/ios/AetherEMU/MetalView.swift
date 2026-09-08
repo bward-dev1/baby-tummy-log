@@ -30,7 +30,16 @@ final class MetalHostView: UIView {
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        AetherBridge.shared().attachMetalLayer(metalLayer)
+        if window == nil {
+            // Leaving the view hierarchy -- this view (and its backing CAMetalLayer,
+            // since layerClass makes it the sole owner) may deallocate after this.
+            // AetherBridge's stored surface is a strong reference now, but detaching
+            // explicitly avoids the engine holding onto a stale layer for a view that's
+            // gone -- see AetherBridge.mm's AetherNativeSurface comment.
+            AetherBridge.shared().detachMetalLayer()
+        } else {
+            AetherBridge.shared().attachMetalLayer(metalLayer)
+        }
     }
 
     override func layoutSubviews() {

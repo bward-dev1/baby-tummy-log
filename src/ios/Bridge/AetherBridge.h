@@ -26,6 +26,11 @@ typedef NS_ENUM(NSInteger, AetherLoadResult) {
 /// after the app returns from background (the layer's drawable size may have changed).
 - (void)attachMetalLayer:(CAMetalLayer *)layer;
 
+/// Call from the hosting view's teardown (e.g. willMove(toWindow: nil)) before its
+/// CAMetalLayer deallocates. Without this, the engine's stored surface pointer would
+/// outlive the layer it points to -- see AetherBridge.mm's AetherNativeSurface comment.
+- (void)detachMetalLayer;
+
 /// Loads a game image (NSP/XCI/NCA) from an already security-scoped-accessible path
 /// and starts emulation on a background thread. Returns immediately.
 - (AetherLoadResult)loadGameAtPath:(NSString *)path;
