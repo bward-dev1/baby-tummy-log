@@ -35,6 +35,14 @@ typedef NS_ENUM(NSInteger, AetherLoadResult) {
 /// and starts emulation on a background thread. Returns immediately.
 - (AetherLoadResult)loadGameAtPath:(NSString *)path;
 
+/// Forwards a touch-down event. `x`/`y` must be in the CAMetalLayer's pixel space
+/// (i.e. view-point coords already multiplied by contentScaleFactor), matching the
+/// drawableSize set in MetalHostView.layoutSubviews. `touchId` should be a stable
+/// per-finger identifier (UITouch's hash or an assigned index) fitting in `int`.
+- (void)touchPressed:(NSInteger)touchId x:(float)x y:(float)y;
+- (void)touchMoved:(NSInteger)touchId x:(float)x y:(float)y;
+- (void)touchReleased:(NSInteger)touchId;
+
 - (void)pause;
 - (void)resume;
 - (void)shutdown;

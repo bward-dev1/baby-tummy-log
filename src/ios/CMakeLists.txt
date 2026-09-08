@@ -21,6 +21,7 @@ add_library(aetheremu-ios STATIC
     emu_window/emu_window.mm
     native.h
     native.mm
+    native_surface.h
 )
 
 target_link_libraries(aetheremu-ios PRIVATE audio_core common core input_common frontend_common video_core)

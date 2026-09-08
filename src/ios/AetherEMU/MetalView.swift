@@ -18,6 +18,13 @@ final class MetalHostView: UIView {
         layer as! CAMetalLayer
     }
 
+    // TODO(ios): untested, no CI oracle available -- UITouch has no stable small int
+    // id, so we assign one per touch and track it in this dictionary (UITouch is
+    // Hashable/Equatable by identity, so this works as a key, but the whole path is
+    // unverified without a device). Cleared on touchesEnded/Cancelled.
+    private var touchIDs: [UITouch: Int] = [:]
+    private var nextTouchID = 0
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         metalLayer.pixelFormat = .bgra8Unorm
@@ -52,6 +59,49 @@ final class MetalHostView: UIView {
             height: bounds.height * contentScaleFactor
         )
         AetherBridge.shared().attachMetalLayer(metalLayer)
+    }
+
+    // TODO(ios): untested, no CI oracle available. Coordinates are converted to the
+    // CAMetalLayer's pixel space (points * contentScaleFactor) to match drawableSize
+    // above -- this MUST match whatever EmuWindow_iOS::OnSurfaceChanged eventually sets
+    // m_window_width/m_window_height (and therefore framebuffer_layout) to once that
+    // TODO is filled in (currently a stub, see emu_window.mm), or MapToTouchScreen's
+    // 0-1 normalization will divide by the wrong denominator and touches will land at
+    // the wrong point on the emulated touchscreen.
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesBegan(touches, with: event)
+        for touch in touches {
+            let id = nextTouchID
+            nextTouchID += 1
+            touchIDs[touch] = id
+            let p = touch.location(in: self)
+            AetherBridge.shared().touchPressed(
+                id, x: Float(p.x * contentScaleFactor), y: Float(p.y * contentScaleFactor))
+        }
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesMoved(touches, with: event)
+        for touch in touches {
+            guard let id = touchIDs[touch] else { continue }
+            let p = touch.location(in: self)
+            AetherBridge.shared().touchMoved(
+                id, x: Float(p.x * contentScaleFactor), y: Float(p.y * contentScaleFactor))
+        }
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesEnded(touches, with: event)
+        for touch in touches {
+            guard let id = touchIDs.removeValue(forKey: touch) else { continue }
+            AetherBridge.shared().touchReleased(id)
+        }
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        // Same as Android's ACTION_CANCEL -- release on cancel too, don't leave a
+        // dangling pressed touch on the emulated touchscreen.
+        touchesEnded(touches, with: event)
     }
 }
 

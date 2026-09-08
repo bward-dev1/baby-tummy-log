@@ -7,13 +7,13 @@
 
 #include <os/lock.h>
 
+#import "ios/native_surface.h"
+
 // native.h only forward-declares `struct AetherNativeSurface;` (deliberately opaque so
 // that header has zero Objective-C dependency and stays includable from plain C++ TUs
-// -- see its comment). This is the one place it's actually defined, wrapping the
-// CAMetalLayer Swift hands us. EmuWindow_iOS/GraphicsContext_iOS never dereference it
-// today (see emu_window.h's TODOs), so no other translation unit needs this definition
-// yet -- when Metal rendering is wired up, whatever reads the layer to build a
-// CAMetalDrawable will need to move into an .mm file that includes this header too.
+// -- see its comment). The real definition lives in ios/native_surface.h so both this
+// file and emu_window.mm (both .mm) can see it -- EmuWindow_iOS::OnSurfaceChanged now
+// dereferences `->layer` to hand video_core the raw CAMetalLayer pointer.
 //
 // `layer` is a strong (ARC-retaining) reference, not __unsafe_unretained -- this struct
 // lives inside AetherBridge, a process-lifetime singleton, so an unsafe_unretained field
@@ -23,9 +23,6 @@
 // _surfaceLock since the emulation engine may eventually read this from its own queue
 // (see EmuWindow_iOS's TODOs) while the main thread calls attachMetalLayer/
 // detachMetalLayer during ordinary view lifecycle events.
-struct AetherNativeSurface {
-    CAMetalLayer *layer;
-};
 
 @implementation AetherBridge {
     AetherNativeSurface _surface;
@@ -68,13 +65,19 @@ struct AetherNativeSurface {
 - (AetherLoadResult)loadGameAtPath:(NSString *)path {
     std::string cpath = std::string([path UTF8String]);
 
-    // TODO(ios): ConfigureFilesystemProvider/InitializeEmulation are currently
-    // synchronous stubs (see native.mm) -- calling them on the emulation queue rather
-    // than the caller's queue so this method itself stays non-blocking, but neither
-    // does real I/O yet, so this doesn't validate real load timing.
+    // TODO(ios): InitializeEmulation is currently a best-effort, untested implementation
+    // (see native.mm) -- calling it on the emulation queue rather than the caller's
+    // queue so this method itself stays non-blocking, but it doesn't validate real load
+    // timing yet.
+    //
+    // NOTE(ios): ConfigureFilesystemProvider is intentionally NOT called here anymore --
+    // InitializeEmulation now calls it internally (mirroring Android, whose JNI entry
+    // point only calls InitializeEmulation and lets it call ConfigureFilesystemProvider
+    // once system bring-up/InitializeSystem has run). Calling it from here first would
+    // dereference m_manual_provider before InitializeEmulation's InitializeSystem() call
+    // has constructed it.
     dispatch_async(_emulationQueue, ^{
       auto &session = EmulationSession::GetInstance();
-      session.ConfigureFilesystemProvider(cpath);
       const auto result = session.InitializeEmulation(cpath);
       if (result == Core::SystemResultStatus::Success) {
           session.RunEmulation();
@@ -88,6 +91,30 @@ struct AetherNativeSurface {
     // still stub logging, see native.mm). Report optimistically for now; a future pass
     // should thread a completion block through instead of returning eagerly.
     return AetherLoadResultSuccess;
+}
+
+// TODO(ios): untested, no CI oracle available -- mirrors Android's native_input.cpp
+// IsRunning()-gated forwarding into EmuWindow_iOS::OnTouch*/*, but this is the first
+// caller of those methods on iOS so the whole path is unverified end to end.
+- (void)touchPressed:(NSInteger)touchId x:(float)x y:(float)y {
+    if (!EmulationSession::GetInstance().IsRunning()) {
+        return;
+    }
+    EmulationSession::GetInstance().Window().OnTouchPressed(static_cast<int>(touchId), x, y);
+}
+
+- (void)touchMoved:(NSInteger)touchId x:(float)x y:(float)y {
+    if (!EmulationSession::GetInstance().IsRunning()) {
+        return;
+    }
+    EmulationSession::GetInstance().Window().OnTouchMoved(static_cast<int>(touchId), x, y);
+}
+
+- (void)touchReleased:(NSInteger)touchId {
+    if (!EmulationSession::GetInstance().IsRunning()) {
+        return;
+    }
+    EmulationSession::GetInstance().Window().OnTouchReleased(static_cast<int>(touchId));
 }
 
 - (void)pause {

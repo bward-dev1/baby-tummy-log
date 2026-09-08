@@ -14,10 +14,10 @@
 #include "core/frontend/graphics_context.h"
 #include "input_common/main.h"
 
-// TODO(ios): This is a placeholder for the native surface type the Metal bridge will
-// hand off (e.g. a CAMetalLayer* pulled out of a CAMetalLayer-backed UIView/MTKView).
-// Forward-declared as an opaque pointer so this header has zero Objective-C dependency
-// and can be included from plain C++ translation units.
+// Real definition lives in ios/native_surface.h (an ObjC++ header, included only from
+// .mm files -- AetherBridge.mm and emu_window.mm). Forward-declared as an opaque type
+// here so this header has zero Objective-C dependency and can be included from plain
+// C++ translation units.
 struct AetherNativeSurface;
 
 class GraphicsContext_iOS final : public Core::Frontend::GraphicsContext {
@@ -35,10 +35,12 @@ private:
     std::shared_ptr<Common::DynamicLibrary> m_driver_library;
 };
 
-// TODO(ios): This mirrors EmuWindow_Android's shape but is currently an unimplemented
-// stub -- it exists so the iOS bridge target has something concrete to compile/link
-// against ahead of an actual Xcode app target and Metal-backed view. None of the
-// surface/frame-rate-hint logic below is real yet.
+// TODO(ios): This mirrors EmuWindow_Android's shape. OnSurfaceChanged now wires a real
+// CAMetalLayer through to window_info (WindowSystemType::Cocoa + the raw layer pointer,
+// see emu_window.mm) so video_core's Vulkan CreateSurface has what it needs -- but this
+// is UNVERIFIED, no local Xcode/iOS SDK/device exists to compile or run it against CI.
+// Touch input (OnTouchPressed/Moved/Released below) and frame-rate hints are still not
+// wired to any real UIKit event source -- there's no app target/view hierarchy yet.
 class EmuWindow_iOS final : public Core::Frontend::EmuWindow {
 
 public:
@@ -47,8 +49,9 @@ public:
 
     ~EmuWindow_iOS() = default;
 
-    // TODO(ios): Called when the app hands us a new/updated CAMetalLayer (e.g. on
-    // view resize, or after a scene reconnects following backgrounding).
+    // Called when the app hands us a new/updated CAMetalLayer (e.g. on view resize, or
+    // after a scene reconnects following backgrounding). Sets window_info.render_surface
+    // (the raw CAMetalLayer*, __bridge void*) and window_info.type -- see emu_window.mm.
     void OnSurfaceChanged(AetherNativeSurface* surface);
     void OnFrameDisplayed() override;
 

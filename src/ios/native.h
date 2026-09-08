@@ -58,6 +58,14 @@ public:
     // (iOS sandboxing) rather than a raw path once there's a real file picker to wire
     // this up to.
     void ConfigureFilesystemProvider(const std::string& filepath);
+
+    // TODO(ios): mirrors Android's InitializeSystem(bool reload) minus the one-time
+    // logging/input-subsystem bring-up (native.mm's constructor + EmulationSession
+    // lifetime already cover that on this platform) -- wires m_vfs into Core, constructs
+    // m_manual_provider, and registers the content-provider union. Must run before
+    // ConfigureFilesystemProvider/InitializeEmulation touch either of those.
+    void InitializeSystem();
+
     Core::SystemResultStatus InitializeEmulation(const std::string& filepath);
 
     static void OnEmulationStarted();
