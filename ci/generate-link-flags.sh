@@ -23,6 +23,7 @@ OUT_FILE="${1:?usage: generate-link-flags.sh <output-response-file>}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BUILD_DIR="$REPO_ROOT/build"
+CPM_CACHE_DIR="$REPO_ROOT/.cache/cpm"
 
 if [[ ! -d "$BUILD_DIR" ]]; then
     echo "generate-link-flags.sh: no build/ directory at $BUILD_DIR -- run the CMake" >&2
@@ -36,6 +37,19 @@ while IFS= read -r -d '' lib; do
     printf '%q\n' "$lib" >> "$OUT_FILE"
     found_any=1
 done < <(find "$BUILD_DIR" -name '*.a' -not -path '*/CMakeFiles/*' -print0)
+
+# Not everything CMake links against is actually compiled by this build -- moltenvk-ios
+# is a downloaded prebuilt xcframework (see externals/CMakeLists.txt's MOLTENVK_LIBRARY),
+# and CPM's get_cache_path() (CMakeModules/CPMUtil.cmake) resolves it to
+# .cache/cpm/moltenvk-ios/<version>/..., entirely outside build/ -- confirmed by reading
+# that CMake logic directly, not guessed. Sweep the whole CPM cache for prebuilt .a/.xcframework
+# static libs too, so this doesn't silently produce a binary missing Vulkan/Metal symbols.
+if [[ -d "$CPM_CACHE_DIR" ]]; then
+    while IFS= read -r -d '' lib; do
+        printf '%q\n' "$lib" >> "$OUT_FILE"
+        found_any=1
+    done < <(find "$CPM_CACHE_DIR" -path '*.xcframework/*' -name '*.a' -print0)
+fi
 
 if [[ "$found_any" -eq 0 ]]; then
     echo "generate-link-flags.sh: found zero .a files under $BUILD_DIR -- did the core" >&2

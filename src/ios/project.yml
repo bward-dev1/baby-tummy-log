@@ -21,8 +21,15 @@ settings:
   # through CMake.
   HEADER_SEARCH_PATHS:
     - '$(SRCROOT)/..'
-    - '$(SRCROOT)/../../build/_deps/boost-src'
+    # CPMUtil.cmake's AddPackage flow passes an explicit SOURCE_DIR already under
+    # .cache/cpm/... into FetchContent_Declare, so CPM-managed packages never land under
+    # the default <binary_dir>/_deps/<name>-src path -- confirmed by reading that CMake
+    # logic, not guessed (there is no build/_deps/boost-src to find).
     - '$(SRCROOT)/../../.cache/cpm/boost/**'
+    # `boost` and `boost_headers` (CMakeLists.txt's fallback for when Boost::headers
+    # isn't available via CPM, see its "really annoying" comment) are separate CPM
+    # packages, cached under separate directories keyed by package name.
+    - '$(SRCROOT)/../../.cache/cpm/boost_headers/**'
   # Static libs already built by `cmake --build build --config Release` (core,
   # video_core, audio_core, aetheremu-ios, every bundled CPM dependency) -- see
   # ci/generate-link-flags.sh's header comment for why full paths in a response file
