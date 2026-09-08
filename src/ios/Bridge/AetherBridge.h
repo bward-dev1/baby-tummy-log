@@ -24,7 +24,11 @@ typedef NS_ENUM(NSInteger, AetherLoadResult) {
 
 /// Hands the engine a CAMetalLayer to render into. Call again after a layer resize or
 /// after the app returns from background (the layer's drawable size may have changed).
-- (void)attachMetalLayer:(CAMetalLayer *)layer;
+/// NS_SWIFT_NAME pins the Swift-visible name -- Swift's importer otherwise auto-strips
+/// "MetalLayer" from the selector since it matches the parameter's type name, silently
+/// renaming this to attach(_:) and breaking every existing MetalView.swift call site
+/// (a real CI failure this caught: "'attachMetalLayer' has been renamed to 'attach(_:)'").
+- (void)attachMetalLayer:(CAMetalLayer *)layer NS_SWIFT_NAME(attachMetalLayer(_:));
 
 /// Call from the hosting view's teardown (e.g. willMove(toWindow: nil)) before its
 /// CAMetalLayer deallocates. Without this, the engine's stored surface pointer would

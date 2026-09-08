@@ -19,7 +19,11 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
 struct SettingsView: View {
     var onDismiss: () -> Void
 
-    @State private var section: SettingsSection = .about
+    // Optional, not SettingsSection: the non-optional-selection List(_:selection:rowContent:)
+    // overload is unavailable on iOS (a real CI compile error caught this --
+    // "'init(_:selection:rowContent:)' is unavailable in iOS"); the Optional-Binding
+    // overload is the one that's actually available cross-platform.
+    @State private var section: SettingsSection? = .about
 
     var body: some View {
         NavigationStack {
@@ -34,7 +38,7 @@ struct SettingsView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        switch section {
+                        switch section ?? .about {
                         case .about:
                             aboutSection
                         case .graphics:
@@ -81,9 +85,9 @@ struct SettingsView: View {
 
     private var controlsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Touch and gamepad input are not wired up yet.")
+            Text("Touch and MFi/PS/Xbox controller input are wired, but untested on real hardware.")
                 .foregroundStyle(.secondary)
-            Text("EmuWindow_iOS's touch handlers exist as stubs pending UIKit UITouch forwarding.")
+            Text("No per-game button remapping UI exists yet -- controllers use InputCommon::GameController's default mapping.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
