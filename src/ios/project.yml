@@ -33,6 +33,16 @@ settings:
     # the default <binary_dir>/_deps/<name>-src path -- confirmed by reading that CMake
     # logic, not guessed (there is no build/_deps/boost-src to find).
     - '$(SRCROOT)/../../.cache/cpm/boost/**'
+    # The recursive glob above found libs/unordered (confirmed present in a failed
+    # build's actual -I list) but NOT libs/unordered/include specifically, even though
+    # other libraries' /include subdirectories were found fine -- and the CMake "Build"
+    # step (Boost::headers, a real umbrella INTERFACE target) successfully compiles
+    # common/container/unordered_map.h's `#include <boost/unordered/unordered_flat_map.hpp>`
+    # from this exact checkout, so the file does exist on disk; this is an Xcode/xcodegen
+    # glob-expansion gap for this one library, not a missing submodule. Added explicitly
+    # rather than trying to guess a different recursive-glob shape that might have the
+    # same gap for some other library.
+    - '$(SRCROOT)/../../.cache/cpm/boost/boost-*/libs/unordered/include'
     # `boost` and `boost_headers` (CMakeLists.txt's fallback for when Boost::headers
     # isn't available via CPM, see its "really annoying" comment) are separate CPM
     # packages, cached under separate directories keyed by package name.
