@@ -607,6 +607,18 @@ if (NOT YUZU_STATIC_ROOM)
     endif()
 
     if (ARCHITECTURE_arm64 OR DYNARMIC_TESTS)
+        if (IOS)
+            # iOS has no system package manager for a pre-installed oaknut (see the
+            # "iOS has no system package manager" if(IOS) block above for FFmpeg/SDL3/
+            # OpenSSL/etc) -- without this, find_package(oaknut) below (and dynarmic's
+            # own internal find_package(oaknut 2.0.1 CONFIG), src/dynarmic/CMakeLists.txt)
+            # both fail silently (neither is REQUIRED), which silently skips dynarmic's
+            # entire arm64 JIT backend rather than erroring. A real CI link failure
+            # caught this: every Dynarmic::A64::Jit/A32::Jit public method undefined,
+            # meaning the backend implementation files (which need oaknut, an ARM64
+            # assembler) were never compiled into libdynarmic.a at all.
+            AddJsonPackage(oaknut)
+        endif()
         find_package(oaknut)
     endif()
 
