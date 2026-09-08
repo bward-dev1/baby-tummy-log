@@ -16,6 +16,9 @@ jobs:
           xcodebuild -version
           xcodebuild -showsdks
 
+      - name: Install host build tools
+        run: brew install glslang
+
       - name: Cache CPM downloads
         uses: actions/cache@v4
         with:
