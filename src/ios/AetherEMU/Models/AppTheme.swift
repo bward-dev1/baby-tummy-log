@@ -6,6 +6,7 @@ import SwiftUI
 enum AppTheme: String, CaseIterable, Identifiable {
     case rail              // vertical side-rail layout
     case dock              // bottom-dock layout with Folders
+    case classicEden       // desktop-Eden-style toolbar + list layout
     case lavaWarm          // full-width carousel, warm pink/orange/magenta lava-lamp background
     case lavaCool          // full-width carousel, cool blue/teal/purple lava-lamp background
     case lavaVerticalRed   // vertical list layout, coral/rose/magenta lava-lamp background
@@ -19,6 +20,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
         switch self {
         case .rail: return "Rail"
         case .dock: return "Dock"
+        case .classicEden: return "Classic Eden"
         case .lavaWarm: return "Lava Lamp — Warm"
         case .lavaCool: return "Lava Lamp — Cool"
         case .lavaVerticalRed: return "Lava Lamp — Vertical Red"
@@ -32,6 +34,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
         switch self {
         case .rail: return "Side navigation, curated shelves, a detail panel next to your library."
         case .dock: return "Full-width carousel with a floating bottom dock and Folders."
+        case .classicEden: return "A dense, sortable game list with a toolbar and status bar -- desktop-emulator style."
         case .lavaWarm: return "Soft floating color blobs over a warm pink/orange gradient."
         case .lavaCool: return "Soft floating color blobs over a cool blue/teal gradient."
         case .lavaVerticalRed: return "A scrollable vertical list over a coral/rose/magenta gradient."
@@ -47,6 +50,8 @@ enum AppTheme: String, CaseIterable, Identifiable {
             return LinearGradient(colors: [.purple, .indigo, .blue], startPoint: .topLeading, endPoint: .bottomTrailing)
         case .dock:
             return LinearGradient(colors: [.pink, .orange, .yellow], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .classicEden:
+            return LinearGradient(colors: [Color(white: 0.2), Color(white: 0.1)], startPoint: .topLeading, endPoint: .bottomTrailing)
         case .lavaWarm:
             return LavaLampPalette.warm.base
         case .lavaCool:

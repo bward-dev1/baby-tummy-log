@@ -2,12 +2,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 import UniformTypeIdentifiers
 
 struct ContentView: View {
     // nil until the user picks one (ThemePickerView) -- entirely reshapes the home
     // screen once set, per-theme layouts in HomeView (Rail) vs. DockHomeView (Dock).
     @AppStorage("aetheremu.appTheme") private var storedTheme: String?
+    @AppStorage("aetheremu.keepAwake") private var keepAwakeDuringPlay = true
 
     // Owns the actual managed Games folder + persistence -- games/folders used to be
     // plain @State, reset to empty on every relaunch. See GameLibrary.swift.
@@ -64,6 +68,15 @@ struct ContentView: View {
                     )
                 case .dock:
                     DockHomeView(
+                        games: $library.games,
+                        folders: $library.folders,
+                        onPlay: loadGame,
+                        onImportTapped: { isPickingGame = true },
+                        onChangeTheme: { storedTheme = nil },
+                        onShowLibrary: { isShowingLibrary = true }
+                    )
+                case .classicEden:
+                    EdenClassicHomeView(
                         games: $library.games,
                         folders: $library.folders,
                         onPlay: loadGame,
@@ -168,6 +181,11 @@ struct ContentView: View {
         }
         .animation(.easeInOut(duration: 0.25), value: isLoadingGame)
         .animation(.easeInOut(duration: 0.3), value: theme)
+        .onChange(of: isRunning) { running in
+            #if canImport(UIKit)
+            UIApplication.shared.isIdleTimerDisabled = running && keepAwakeDuringPlay
+            #endif
+        }
         .fileImporter(isPresented: $isPickingGame, allowedContentTypes: Self.gameContentTypes) { result in
             switch result {
             case .success(let url):

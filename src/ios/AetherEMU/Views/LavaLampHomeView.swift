@@ -84,11 +84,14 @@ struct LavaLampHomeView: View {
                             Text(game.title)
                                 .font(.headline)
                                 .foregroundStyle(.white)
+                                .id(game.id)
+                                .transition(.opacity)
                         }
                     }
                 }
                 .padding(20)
                 .glassCard()
+                .animation(.easeInOut(duration: 0.2), value: selected)
 
                 Spacer()
 
@@ -129,5 +132,6 @@ struct LavaLampHomeView: View {
         .sheet(isPresented: $isShowingSettings) {
             SettingsView(onDismiss: { isShowingSettings = false })
         }
+        .railDestinations(rail: $rail, games: games, folders: [], onPlay: onPlay)
     }
 }

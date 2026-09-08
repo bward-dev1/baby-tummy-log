@@ -36,7 +36,7 @@ struct LaunchLockView: View {
                         .background(.white.opacity(0.15), in: Capsule())
                         .foregroundStyle(.white)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressScaleButtonStyle())
                 .padding(.bottom, 40)
             }
         }

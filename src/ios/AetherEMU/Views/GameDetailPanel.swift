@@ -16,8 +16,15 @@ enum DetailTab: String, CaseIterable {
 struct GameDetailPanel: View {
     let game: Game
     var onPlay: () -> Void
+    var onRemove: () -> Void = {}
 
     @State private var tab: DetailTab = .info
+    @State private var isConfirmingRemove = false
+
+    private var fileSizeFormatted: String {
+        let size = (try? FileManager.default.attributesOfItem(atPath: game.path.path)[.size] as? Int64) ?? 0
+        return ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -45,17 +52,23 @@ struct GameDetailPanel: View {
                         .background(.white, in: Capsule())
                         .foregroundStyle(.black)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressScaleButtonStyle())
             }
 
             HStack(spacing: 20) {
                 ForEach(DetailTab.allCases, id: \.self) { candidate in
                     Button {
-                        tab = candidate
+                        withAnimation(.easeInOut(duration: 0.15)) { tab = candidate }
                     } label: {
-                        Text(candidate.rawValue)
-                            .font(.subheadline.weight(tab == candidate ? .bold : .regular))
-                            .foregroundStyle(tab == candidate ? .white : .white.opacity(0.5))
+                        VStack(spacing: 4) {
+                            Text(candidate.rawValue)
+                                .font(.subheadline.weight(tab == candidate ? .bold : .regular))
+                                .foregroundStyle(tab == candidate ? .white : .white.opacity(0.5))
+                            Capsule()
+                                .fill(.white)
+                                .frame(height: 2)
+                                .opacity(tab == candidate ? 1 : 0)
+                        }
                     }
                     .buttonStyle(.plain)
                 }
@@ -66,22 +79,41 @@ struct GameDetailPanel: View {
             Group {
                 switch tab {
                 case .info:
-                    LabeledContent("File", value: game.path.lastPathComponent)
-                        .foregroundStyle(.white.opacity(0.8))
+                    VStack(alignment: .leading, spacing: 8) {
+                        LabeledContent("File", value: game.path.lastPathComponent)
+                        LabeledContent("Size", value: fileSizeFormatted)
+                        Button(role: .destructive) {
+                            isConfirmingRemove = true
+                        } label: {
+                            Label("Remove from Library", systemImage: "trash")
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.red.opacity(0.9))
+                        .padding(.top, 4)
+                    }
+                    .foregroundStyle(.white.opacity(0.8))
                 case .saveStates:
-                    Text("No save states yet.")
+                    Text("No save states yet -- AetherEMU's core doesn't have save-state serialization implemented.")
                         .foregroundStyle(.white.opacity(0.5))
                 case .mods:
-                    Text("Mod support isn't wired up yet.")
+                    Text("Mod support isn't wired up yet -- Eden's LayeredFS mod loader exists in the core, but there's no per-game mod folder picker on iOS yet.")
                         .foregroundStyle(.white.opacity(0.5))
                 }
             }
             .font(.footnote)
+            .transition(.opacity)
+            .id(tab)
 
             Spacer()
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassCard()
+        .confirmationDialog(
+            "Remove \(game.title) from your library?", isPresented: $isConfirmingRemove, titleVisibility: .visible
+        ) {
+            Button("Remove", role: .destructive, action: onRemove)
+            Button("Cancel", role: .cancel) {}
+        }
     }
 }

@@ -9,6 +9,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
     case systemFiles = "Keys & Firmware"
     case graphics = "Graphics"
     case controls = "Controls"
+    case preferences = "Preferences"
     case storage = "Storage"
     case logs = "Logs"
 
@@ -27,6 +28,9 @@ struct SettingsView: View {
     // "'init(_:selection:rowContent:)' is unavailable in iOS"); the Optional-Binding
     // overload is the one that's actually available cross-platform.
     @State private var section: SettingsSection? = .about
+
+    @AppStorage("aetheremu.keepAwake") private var keepAwakeDuringPlay = true
+    @AppStorage("aetheremu.appTheme") private var storedTheme: String?
 
     @State private var isPickingKeys = false
     @State private var isPickingFirmware = false
@@ -61,6 +65,8 @@ struct SettingsView: View {
                             graphicsSection
                         case .controls:
                             controlsSection
+                        case .preferences:
+                            preferencesSection
                         case .storage:
                             storageSection
                         case .logs:
@@ -219,6 +225,29 @@ struct SettingsView: View {
             Text("Touch and MFi/PS/Xbox controller input are wired, but untested on real hardware.")
                 .foregroundStyle(.secondary)
             Text("No per-game button remapping UI exists yet -- controllers use InputCommon::GameController's default mapping.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var preferencesSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Toggle("Keep Screen Awake During Gameplay", isOn: $keepAwakeDuringPlay)
+                .tint(.accentColor)
+            Text("When on, iOS won't auto-lock the screen while a game is running.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            Divider()
+
+            Button(role: .destructive) {
+                storedTheme = nil
+                onDismiss()
+            } label: {
+                Label("Reset Theme (Show Picker Again)", systemImage: "paintbrush.pointed")
+            }
+            .buttonStyle(.bordered)
+            Text("Clears your saved layout choice so you'll pick again next time you open AetherEMU.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }

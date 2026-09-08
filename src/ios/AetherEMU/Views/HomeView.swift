@@ -28,11 +28,15 @@ struct HomeView: View {
 
                 VStack(spacing: 16) {
                     if let game = selected {
-                        GameDetailPanel(game: game, onPlay: { onPlay(game) })
+                        GameDetailPanel(game: game, onPlay: { onPlay(game) }, onRemove: { removeGame(game) })
+                            .id(game.id)
+                            .transition(.opacity.combined(with: .scale(scale: 0.98)))
                     } else {
                         emptyStateHero
+                            .transition(.opacity)
                     }
                 }
+                .animation(.easeInOut(duration: 0.25), value: selected)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 // Rail has no folder-browsing view of its own yet (unlike Dock's
@@ -74,12 +78,24 @@ struct HomeView: View {
         .sheet(isPresented: $isShowingSettings) {
             SettingsView(onDismiss: { isShowingSettings = false })
         }
+        .railDestinations(rail: $rail, games: games, folders: folders, onPlay: onPlay)
     }
 
     private func addToFolder(_ game: Game, _ folder: GameFolder) {
         guard let index = folders.firstIndex(where: { $0.id == folder.id }) else { return }
         if !folders[index].gameIDs.contains(game.id) {
             folders[index].gameIDs.append(game.id)
+        }
+    }
+
+    private func removeGame(_ game: Game) {
+        try? FileManager.default.removeItem(at: game.path)
+        games.removeAll { $0.id == game.id }
+        for index in folders.indices {
+            folders[index].gameIDs.removeAll { $0 == game.id }
+        }
+        if selected?.id == game.id {
+            withAnimation { selected = games.first }
         }
     }
 

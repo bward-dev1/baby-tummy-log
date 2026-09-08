@@ -79,12 +79,14 @@ struct VerticalLavaLampHomeView: View {
                                                     .foregroundStyle(.black)
                                             }
                                             .buttonStyle(.plain)
+                                            .transition(.scale.combined(with: .opacity))
                                         }
                                     }
                                     .padding(10)
                                     .glassCard(cornerRadius: 16)
                                 }
                                 .buttonStyle(.plain)
+                                .animation(.spring(response: 0.3, dampingFraction: 0.75), value: selected)
                             }
                         }
                         .padding(.horizontal, 20)
@@ -117,5 +119,6 @@ struct VerticalLavaLampHomeView: View {
         .sheet(isPresented: $isShowingSettings) {
             SettingsView(onDismiss: { isShowingSettings = false })
         }
+        .railDestinations(rail: $rail, games: games, folders: [], onPlay: onPlay)
     }
 }

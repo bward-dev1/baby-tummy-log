@@ -28,10 +28,12 @@ struct DockBar: View {
                         .font(.system(size: 20, weight: .semibold))
                         .frame(width: 48, height: 48)
                         .foregroundStyle(selection == section ? .white : .white.opacity(0.55))
+                        .scaleEffect(selection == section ? 1.1 : 1.0)
                         .background(
                             Circle()
                                 .fill(selection == section ? Color.white.opacity(0.18) : Color.clear)
                         )
+                        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: selection)
                 }
                 .buttonStyle(.plain)
             }

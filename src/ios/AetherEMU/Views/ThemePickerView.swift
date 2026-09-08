@@ -47,7 +47,7 @@ struct ThemePickerView: View {
                                 .padding(16)
                                 .glassCard()
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(PressScaleButtonStyle())
                         }
                     }
                     .padding(.horizontal, 8)
@@ -55,5 +55,16 @@ struct ThemePickerView: View {
             }
             .padding(32)
         }
+    }
+}
+
+/// Simple press-feedback style: shrinks slightly while held, springs back on release.
+/// Used on the theme tiles since choosing a theme is the very first interaction in the
+/// app and deserves to feel responsive.
+struct PressScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .animation(.spring(response: 0.25, dampingFraction: 0.6), value: configuration.isPressed)
     }
 }

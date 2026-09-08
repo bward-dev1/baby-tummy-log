@@ -23,6 +23,8 @@ struct GameTile: View {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .strokeBorder(isSelected ? .white : .white.opacity(0.15), lineWidth: isSelected ? 3 : 1)
             )
+            .scaleEffect(isSelected ? 1.03 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.75), value: isSelected)
             .aspectRatio(3.0 / 4.0, contentMode: .fit)
     }
 }

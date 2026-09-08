@@ -75,6 +75,7 @@ struct DockHomeView: View {
                             onOpen: { openFolder = $0 }
                         )
                         .frame(minHeight: 260)
+                        .transition(.opacity.combined(with: .move(edge: .trailing)))
                     } else if games.isEmpty {
                         VStack(spacing: 8) {
                             Image(systemName: "square.and.arrow.down")
@@ -161,6 +162,8 @@ struct DockHomeView: View {
                 }
                 .padding(20)
                 .glassCard()
+                .animation(.easeInOut(duration: 0.25), value: mode)
+                .animation(.easeInOut(duration: 0.2), value: selected)
 
                 Spacer()
 
@@ -168,6 +171,7 @@ struct DockHomeView: View {
             }
             .padding(20)
         }
+        .railDestinations(rail: $rail, games: games, folders: folders, onPlay: onPlay)
         .onChange(of: rail) { newValue in
             if newValue == .settings {
                 isShowingSettings = true
@@ -188,9 +192,13 @@ struct DockHomeView: View {
         }
         .sheet(isPresented: $isShowingDetail) {
             if let game = selected {
-                GameDetailPanel(game: game, onPlay: { onPlay(game); isShowingDetail = false })
-                    .padding()
-                    .background(Theme.backgroundGradient)
+                GameDetailPanel(
+                    game: game,
+                    onPlay: { onPlay(game); isShowingDetail = false },
+                    onRemove: { removeGameFromLibrary(game); isShowingDetail = false }
+                )
+                .padding()
+                .background(Theme.backgroundGradient)
             }
         }
         .sheet(item: $openFolder) { folder in
@@ -226,5 +234,16 @@ struct DockHomeView: View {
         guard let index = folders.firstIndex(where: { $0.id == folder.id }) else { return }
         folders[index].gameIDs.removeAll { $0 == game.id }
         openFolder = folders[index]
+    }
+
+    private func removeGameFromLibrary(_ game: Game) {
+        try? FileManager.default.removeItem(at: game.path)
+        games.removeAll { $0.id == game.id }
+        for index in folders.indices {
+            folders[index].gameIDs.removeAll { $0 == game.id }
+        }
+        if selected?.id == game.id {
+            withAnimation { selected = games.first }
+        }
     }
 }
