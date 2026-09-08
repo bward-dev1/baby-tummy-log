@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Games get picked via UIDocumentPickerViewController (see ContentView.swift),
+	     which needs the sandboxed Documents/ folder to actually be visible in
+	     Files/Finder for anyone to put an NSP/XCI there in the first place. Per
+	     cemu-ios-muffin's project.yml comment: on a real built IPA,
+	     GENERATE_INFOPLIST_FILE + INFOPLIST_FILE merging silently drops
+	     UIFileSharingEnabled if it's declared as INFOPLIST_KEY_UIFileSharingEnabled
+	     instead of a literal key here -- unverified on this project specifically
+	     (no completed local build to check against yet), but following that
+	     project's finding rather than re-discovering it the hard way. -->
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+</dict>
+</plist>

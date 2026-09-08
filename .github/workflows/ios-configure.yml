@@ -62,3 +62,27 @@ jobs:
         with:
           name: build-log
           path: build.log
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project for the app target
+        run: |
+          cd src/ios
+          xcodegen generate
+
+      - name: Build app target (unsigned)
+        run: |
+          set -o pipefail
+          cd src/ios
+          xcodebuild -project AetherEMU.xcodeproj -scheme AetherEMU \
+            -sdk iphoneos -configuration Release \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            build 2>&1 | tee ../../app-build.log
+
+      - name: Upload app build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-build-log
+          path: app-build.log

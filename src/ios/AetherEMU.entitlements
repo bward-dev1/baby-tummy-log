@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- These declare intent for MAP_JIT; they are not a confirmed way to get JIT
+	     working on iOS. get-task-allow / CS_DEBUGGED (set by sideloading tools like
+	     SideStore/AltStore via a momentary debugger attach at launch) is necessary but
+	     may not be sufficient on its own for mmap(MAP_JIT) to succeed -- see
+	     cemu-ios-muffin's Cemu.entitlements for the fuller writeup of this same open
+	     question on a sibling project. Whether this does anything depends on how
+	     whatever tool signs/re-signs this app handles entitlement injection, which
+	     this repo doesn't control. HAS_NCE is gated so the interpreter (JIT-less) path
+	     is what actually runs on iOS regardless -- see the top-level CMakeLists.txt.
+	     JIT here is aspirational, not load-bearing. -->
+	<key>get-task-allow</key>
+	<true/>
+	<key>com.apple.security.cs.allow-jit</key>
+	<true/>
+	<key>com.apple.security.cs.disable-executable-page-protection</key>
+	<true/>
+	<key>dynamic-codesigning</key>
+	<true/>
+</dict>
+</plist>

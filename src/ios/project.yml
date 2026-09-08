@@ -1,0 +1,59 @@
+name: AetherEMU
+
+options:
+  bundleIdPrefix: dev.aetheremu
+  deploymentTarget:
+    iOS: '16.0'
+  xcodeVersion: '16.0'
+
+settings:
+  PRODUCT_NAME: AetherEMU
+  SDKROOT: iphoneos
+  IPHONEOS_DEPLOYMENT_TARGET: '16.0'
+  CODE_SIGN_IDENTITY: iPhone Developer
+  CODE_SIGN_ENTITLEMENTS: AetherEMU.entitlements
+  SWIFT_OBJC_BRIDGING_HEADER: Bridge/AetherEMU-Bridging-Header.h
+  CLANG_ENABLE_MODULES: 'YES'
+  CLANG_ENABLE_OBJC_ARC: 'YES'
+  # AetherBridge.mm includes core/core.h etc. directly -- these need to resolve the
+  # same way they do for the CMake build (top-level CMakeLists.txt / src/*/CMakeLists.txt
+  # target_include_directories), since Xcode compiles this file itself rather than
+  # through CMake.
+  HEADER_SEARCH_PATHS:
+    - '$(SRCROOT)/..'
+    - '$(SRCROOT)/../../build/_deps/boost-src'
+    - '$(SRCROOT)/../../.cache/cpm/boost/**'
+  # Static libs already built by `cmake --build build --config Release` (core,
+  # video_core, audio_core, aetheremu-ios, every bundled CPM dependency) -- see
+  # ci/generate-link-flags.sh's header comment for why full paths in a response file
+  # rather than -l<name> + LIBRARY_SEARCH_PATHS.
+  OTHER_LDFLAGS: '@$(SRCROOT)/link-flags.txt $(inherited) -lc++'
+  GENERATE_INFOPLIST_FILE: 'YES'
+  INFOPLIST_FILE: 'Info-Extra.plist'
+  MARKETING_VERSION: '0.1.0'
+  CURRENT_PROJECT_VERSION: '1'
+  INFOPLIST_KEY_UILaunchScreen_Generation: 'YES'
+  INFOPLIST_KEY_UIApplicationSceneManifest_Generation: 'YES'
+  INFOPLIST_KEY_UISupportedInterfaceOrientations: 'UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight'
+
+targets:
+  AetherEMU:
+    type: application
+    platform: iOS
+    deploymentTarget: '16.0'
+
+    sources:
+      - path: AetherEMU
+        type: group
+      - path: Bridge
+        type: group
+
+    preBuildScripts:
+      - name: Generate linker response file for CMake-built libs
+        script: |
+          "$SRCROOT/../../ci/generate-link-flags.sh" "$SRCROOT/link-flags.txt"
+        outputFiles:
+          - "$SRCROOT/link-flags.txt"
+
+    scheme:
+      gatherCoverageData: false
