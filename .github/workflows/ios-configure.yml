@@ -77,6 +77,7 @@ jobs:
           cd src/ios
           xcodebuild -project AetherEMU.xcodeproj -scheme AetherEMU \
             -sdk iphoneos -configuration Release \
+            -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             build 2>&1 | tee ../../app-build.log
 
@@ -86,3 +87,26 @@ jobs:
         with:
           name: app-build-log
           path: app-build.log
+
+      - name: Package unsigned .app as an .ipa-shaped zip
+        run: |
+          set -euo pipefail
+          APP_PATH=$(find src/ios/build -maxdepth 6 -name "AetherEMU.app" -print -quit)
+          if [ -z "$APP_PATH" ]; then
+            echo "::error::AetherEMU.app not found under src/ios/build -- build succeeded but product is missing"
+            exit 1
+          fi
+          echo "Found app at: $APP_PATH"
+          mkdir -p ipa-out/Payload
+          cp -R "$APP_PATH" ipa-out/Payload/
+          cd ipa-out
+          zip -r ../AetherEMU-unsigned.ipa Payload
+          cd ..
+          echo "Wrote AetherEMU-unsigned.ipa ($(du -h AetherEMU-unsigned.ipa | cut -f1))"
+
+      - name: Upload unsigned IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AetherEMU-unsigned-ipa
+          path: AetherEMU-unsigned.ipa
+          retention-days: 14

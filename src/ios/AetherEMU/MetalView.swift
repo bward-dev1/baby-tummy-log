@@ -7,9 +7,11 @@ import UIKit
 
 /// Hosts a bare CAMetalLayer and hands it to the C++ engine via AetherBridge. The
 /// engine (video_core, via GraphicsContext_iOS -- see emu_window.h) owns the actual
-/// MTLDevice/command queue and drives drawable presentation itself once rendering is
-/// wired up; this view's only job is to exist and expose its layer. No CADisplayLink,
-/// resize forwarding, or touch input is wired yet -- TODOs mirroring emu_window.h's.
+/// MTLDevice/command queue and drives drawable presentation itself; this view's job is
+/// to exist, expose its layer, and forward touch/resize events. Resize forwarding and
+/// touch input (touchesBegan/Moved/Ended/Cancelled below) are both wired -- untested,
+/// no local Xcode/iOS SDK/device/CI result exists yet. No CADisplayLink is used
+/// deliberately: video_core's own GPU thread drives frame presentation, not the view.
 final class MetalHostView: UIView {
     override class var layerClass: AnyClass { CAMetalLayer.self }
 

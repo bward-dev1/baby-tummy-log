@@ -38,9 +38,9 @@ public:
     const EmuWindow_iOS& Window() const;
     EmuWindow_iOS& Window();
 
-    // TODO(ios): Real signature/ownership TBD once the bridge knows what a "native
-    // surface" is on this platform (see AetherNativeSurface in emu_window.h) -- likely a
-    // CAMetalLayer* handed down from a SwiftUI/UIKit MTKView-equivalent.
+    // AetherNativeSurface is only forward-declared here (stays ObjC-free); its real
+    // definition (a CAMetalLayer* handed down from MetalHostView, see MetalView.swift)
+    // lives in ios/native_surface.h, along with the ARC-strong-ref lifetime notes.
     void SetNativeSurface(AetherNativeSurface* native_surface);
     void SurfaceChanged();
 

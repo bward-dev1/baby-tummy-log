@@ -37,10 +37,11 @@ private:
 
 // TODO(ios): This mirrors EmuWindow_Android's shape. OnSurfaceChanged now wires a real
 // CAMetalLayer through to window_info (WindowSystemType::Cocoa + the raw layer pointer,
-// see emu_window.mm) so video_core's Vulkan CreateSurface has what it needs -- but this
-// is UNVERIFIED, no local Xcode/iOS SDK/device exists to compile or run it against CI.
-// Touch input (OnTouchPressed/Moved/Released below) and frame-rate hints are still not
-// wired to any real UIKit event source -- there's no app target/view hierarchy yet.
+// see emu_window.mm) so video_core's Vulkan CreateSurface has what it needs. Touch input
+// (OnTouchPressed/Moved/Released below) is now wired to MetalHostView's UITouch handlers
+// (see MetalView.swift + AetherBridge.mm). All of this is UNVERIFIED -- no local Xcode/
+// iOS SDK/device exists to compile or run it against CI. Frame-rate hints are still not
+// wired to anything.
 class EmuWindow_iOS final : public Core::Frontend::EmuWindow {
 
 public:

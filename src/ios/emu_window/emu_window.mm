@@ -47,8 +47,9 @@ void EmuWindow_iOS::OnSurfaceChanged(AetherNativeSurface* surface) {
     window_info.type = Core::Frontend::WindowSystemType::Cocoa;
 }
 
-// TODO(ios): Route these from UIKit UITouch/UIGestureRecognizer callbacks once there's
-// an app target and view hierarchy to receive them from.
+// Called from AetherBridge.mm's touchPressed:/Moved:/Released:, which MetalHostView
+// (MetalView.swift) forwards real UITouch events into -- UNVERIFIED, no device/CI
+// result exists yet to confirm the coordinate space actually lines up correctly.
 void EmuWindow_iOS::OnTouchPressed(int id, float x, float y) {
     const auto [touch_x, touch_y] = MapToTouchScreen(x, y);
     EmulationSession::GetInstance().GetInputSubsystem().GetTouchScreen()->TouchPressed(touch_x,
@@ -65,9 +66,10 @@ void EmuWindow_iOS::OnTouchReleased(int id) {
     EmulationSession::GetInstance().GetInputSubsystem().GetTouchScreen()->TouchReleased(id);
 }
 
-// TODO(ios): Once a real Metal-backed view exists, this should signal `OnEmulationStarted()`
-// on first frame the way EmuWindow_Android does via a JNI fiber hop; there's no JNI here,
-// so that plumbing needs an iOS-appropriate replacement (e.g. dispatch to main queue).
+// TODO(ios): calls OnEmulationStarted() directly on the first frame -- fine since there's
+// no JNI-fiber-hop equivalent needed here, but this runs on whatever thread the GPU/video
+// thread calls OnFrameDisplayed from, not necessarily the main thread. If anything this
+// triggers ever needs to touch UIKit, it will need an explicit dispatch to the main queue.
 void EmuWindow_iOS::OnFrameDisplayed() {
     if (!m_first_frame) {
         EmulationSession::GetInstance().OnEmulationStarted();

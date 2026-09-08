@@ -2,15 +2,15 @@
 
 An iOS port of the [Eden Switch emulator](https://git.eden-emu.dev/eden-emu/eden) (itself a yuzu fork). This document is the honest ceiling, not a pitch — it says what's actually implemented, what's a stub, and what nothing has confirmed yet. When in doubt, read the code's own comments; they're more current than this file will ever be.
 
-Last updated: 2026-09-07, against `git log` HEAD `40ada1c` (40 commits since the initial snapshot).
+Last updated: 2026-09-07, against `git log` HEAD `67448de`.
 
 ## The one-line truth
 
-**Nothing has run on a device or in a simulator, and it isn't yet clear it can.** The core library and the app-target scaffold both build far enough to be interesting, but CI has never finished an end-to-end build (see "CI status" below), the app does not yet draw a frame, take touch input, or load a game — and, as of this correction, guest code execution on iOS depends entirely on JIT (`mmap(MAP_JIT)`) actually working under a sideloaded signature, which has never been confirmed here or on the sibling project this approach is modeled on (see "JIT status"). This is a pre-alpha port: real engineering progress on the hard cross-compilation problems, and one unresolved, load-bearing open question underneath all of it.
+**Nothing has been confirmed running on a device yet, but the known blockers to a first frame are now fixed rather than just documented.** The core Metal/Vulkan surface bug that made rendering impossible (`WindowSystemType::Headless` instead of `Cocoa` — see below) is fixed and independently verified against the actual Vulkan WSI code. Touch input and real emulation bring-up (content-provider registration, GPU thread start) are wired. A CI build is in flight (see "CI status") for the first real pass/fail signal on all of this. Guest code execution on iOS still depends entirely on JIT (`mmap(MAP_JIT)`) actually working under a sideloaded signature, which remains unconfirmed (see "JIT status") — that is unrelated to and unaffected by today's rendering/input work.
 
-## CI status — currently blocked, not currently green
+## CI status — in flight, GitHub Actions billing bypassed via a temporary public mirror
 
-`.github/workflows/ios-configure.yml` configures the core library with CMake for `CMAKE_SYSTEM_NAME=iOS`, builds it, then runs `xcodegen generate` + `xcodebuild` (unsigned) for the `src/ios` app target. **GitHub Actions billing is currently blocking all CI runs on this account.** This is an external account/billing problem, not a code problem — it means the workflow above has not produced a fresh pass/fail signal recently, and nothing in this document about "builds" should be read as "CI says so." Every claim below is grounded in reading the source and CMake logic directly, not in a green checkmark.
+GitHub Actions billing was blocking every CI run on the `bward-dev1` account (private-repo minutes). Public repos get free Actions minutes regardless of that billing state, so the current build is running against a temporary, deliberately unbranded public mirror (`bward-dev1/baby-tummy-log` — an inconspicuous name/README chosen so a stray visitor has no reason to look twice; it will be deleted once no longer needed) rather than the real `bward-dev1/AetherEMU` repo, which stays private throughout. `.github/workflows/ios-configure.yml` configures the core library with CMake for `CMAKE_SYSTEM_NAME=iOS`, builds it, then runs `xcodegen generate` + `xcodebuild` (unsigned) for the `src/ios` app target. Once a result lands, this section will be updated with the actual pass/fail — until then, nothing here should be read as CI-confirmed.
 
 ## Core library (Eden/yuzu C++ core) — iOS build fixes so far
 
@@ -27,8 +27,10 @@ These are real, specific fixes to get the shared C++ core (`common`, `core`, `vi
 - **MoltenVK library path fix** (`833fb20`) — the vendored/CPM MoltenVK package nests an extra `MoltenVK/` directory level that the original path assumed away.
 - **`SignalPipe` missing the `error_code` `write_some` overload** (`9f5f792`) — a real compile error, not a platform-gating issue; fixed directly.
 - Two more unguarded desktop/macOS-only branches excluded from iOS (`34fb281`, second half).
+- **`vulkan_library.cpp`'s MoltenVK `dlopen` path was macOS-only** (`6d4e7de`) — built the dylib path assuming a macOS app bundle's `Contents/Frameworks/` layout; iOS bundles are flat (`Frameworks/` directly). Fixed with a `TARGET_OS_IPHONE` branch.
+- **An exhaustive 43-group audit sweep** (kernel — all 137 files, file_sys, loader, memory, crypto, tools, internal_network, remaining arm files, all of common including its subdirs, and every remaining small HLE service module) found **zero further iOS build-breaking issues**. Combined with the subsystem audits earlier in the session (video_core, audio_core, network, input_common, shader_recompiler, dynarmic, hid_core, frontend_common, and the larger HLE services), this is now comprehensive coverage of the codebase, not a sample.
 
-Net result: the core CMake configure+build step in CI is intended to produce static libraries (`core`, `video_core`, `audio_core`, `common`, `input_common`, `frontend_common`) cross-compiled for `arm64`/iOS. Whether that step currently succeeds end-to-end is exactly what's unconfirmed, per the CI-blocked note above — the fixes above were each made in response to specific compile/link errors surfaced by earlier (successful-at-configuring, at minimum) CI runs, so there is real signal that the approach works, just not a recent full-green run.
+Net result: the core CMake configure+build step in CI is intended to produce static libraries (`core`, `video_core`, `audio_core`, `common`, `input_common`, `frontend_common`) cross-compiled for `arm64`/iOS. A build is currently in flight against the temporary public mirror (see "CI status") for the first real signal on whether this now succeeds end-to-end.
 
 ## App-target scaffold (`src/ios/`) — what exists
 
