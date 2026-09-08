@@ -50,6 +50,20 @@ struct LavaLampPalette {
         ),
         blobs: [.white.opacity(0.3), .teal.opacity(0.4), .indigo.opacity(0.35)]
     )
+
+    // Near-black charcoal with barely-visible gray blobs -- a low-contrast, dark
+    // variant of the same lava-lamp motif.
+    static let dark = LavaLampPalette(
+        base: LinearGradient(
+            colors: [
+                Color(red: 0.07, green: 0.07, blue: 0.08),
+                Color(red: 0.13, green: 0.13, blue: 0.14),
+                Color(red: 0.09, green: 0.09, blue: 0.1),
+            ],
+            startPoint: .topLeading, endPoint: .bottomTrailing
+        ),
+        blobs: [.white.opacity(0.06), .white.opacity(0.09), .white.opacity(0.05)]
+    )
 }
 
 /// Soft, slowly-drifting translucent circles over a gradient -- the "lava lamp" look

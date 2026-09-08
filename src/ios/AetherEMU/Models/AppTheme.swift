@@ -4,12 +4,14 @@
 import SwiftUI
 
 enum AppTheme: String, CaseIterable, Identifiable {
-    case rail           // vertical side-rail layout
-    case dock           // bottom-dock layout with Folders
-    case lavaWarm       // full-width carousel, warm pink/orange/magenta lava-lamp background
-    case lavaCool       // full-width carousel, cool blue/teal/purple lava-lamp background
+    case rail              // vertical side-rail layout
+    case dock              // bottom-dock layout with Folders
+    case lavaWarm          // full-width carousel, warm pink/orange/magenta lava-lamp background
+    case lavaCool          // full-width carousel, cool blue/teal/purple lava-lamp background
     case lavaVerticalRed   // vertical list layout, coral/rose/magenta lava-lamp background
     case lavaVerticalBlue  // vertical list layout, periwinkle/teal/violet lava-lamp background
+    case lavaDark          // full-width carousel, near-black charcoal lava-lamp background
+    case lavaVerticalDark  // vertical list layout, near-black charcoal lava-lamp background
 
     var id: String { rawValue }
 
@@ -21,6 +23,8 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .lavaCool: return "Lava Lamp — Cool"
         case .lavaVerticalRed: return "Lava Lamp — Vertical Red"
         case .lavaVerticalBlue: return "Lava Lamp — Vertical Blue"
+        case .lavaDark: return "Lava Lamp — Dark"
+        case .lavaVerticalDark: return "Lava Lamp — Vertical Dark"
         }
     }
 
@@ -32,6 +36,8 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .lavaCool: return "Soft floating color blobs over a cool blue/teal gradient."
         case .lavaVerticalRed: return "A scrollable vertical list over a coral/rose/magenta gradient."
         case .lavaVerticalBlue: return "A scrollable vertical list over a periwinkle/teal/violet gradient."
+        case .lavaDark: return "Full-width carousel over a low-contrast charcoal gradient."
+        case .lavaVerticalDark: return "A scrollable vertical list over a low-contrast charcoal gradient."
         }
     }
 
@@ -49,6 +55,8 @@ enum AppTheme: String, CaseIterable, Identifiable {
             return LavaLampPalette.verticalRed.base
         case .lavaVerticalBlue:
             return LavaLampPalette.verticalBlue.base
+        case .lavaDark, .lavaVerticalDark:
+            return LavaLampPalette.dark.base
         }
     }
 }
