@@ -2,7 +2,7 @@
 
 An iOS port of the [Eden Switch emulator](https://git.eden-emu.dev/eden-emu/eden) (itself a yuzu fork). This document is the honest ceiling, not a pitch — it says what's actually implemented, what's a stub, and what nothing has confirmed yet. When in doubt, read the code's own comments; they're more current than this file will ever be.
 
-Last updated: 2026-09-08, against `git log` HEAD `1ac7de4` — CI run `34209056752` is the first fully green build.
+Last updated: 2026-09-08, against `git log` HEAD `f139f49` — CI run `34253594263` is the latest fully green build, including keys/firmware import, a persistent game library, a real log viewer, and a fix for a boot-blocking `applet_id` bug (see "Boot-path bug fix" below).
 
 ## The one-line truth
 
@@ -69,6 +69,22 @@ And per the JIT feasibility research done this session (see git history / sessio
 
 **Important update**: until this session's CMake fixes (see "CI status" above, especially the `ARCHITECTURE_ARM64`/`ARCHITECTURE_arm64` case bug), Dynarmic's actual arm64 JIT backend code had never successfully linked into ANY build of this project on any Apple platform — every `backend/arm64/*.cpp` file silently compiled to an empty translation unit. So this section's analysis (Dynarmic is the only backend, therefore JIT is load-bearing) was correct, but nothing could have actually tested it even in principle before now: there was no way for a real JIT backend to exist in a built binary at all. Now that a real `arm64` binary genuinely containing Dynarmic's JIT code exists (`AetherEMU-unsigned.ipa` from CI run `34209056752`, independently verified as a real Mach-O), the `mmap(MAP_JIT)` question below can finally actually be tested on a device for the first time — this remains unconfirmed and is still the top blocker, but it's now a device-testing question, not also secretly a "does the JIT code even exist in the binary" question.
 
+## Boot-path bug fix (2026-09-08): `applet_id` was defaulting to `None`, not `Application`
+
+`EmulationSession::LoadFileToFilesystem`/game-load path in `native.mm` used to construct `Service::AM::FrontendAppletParameters params{};` — value-initialized, meaning `params.applet_id` defaulted to `AppletId::None` (`0x00`) instead of `AppletId::Application` (`0x01`). `applet_manager.cpp`'s `CreateAndInsertByFrontendAppletParameters` reads `applet_id` directly to decide whether the process it's about to launch should be treated as the game/application itself. Left at `None`, no title loaded through this path could ever have been recognized as the application being booted — independent of JIT, rendering, or anything else in this document; this would have silently no-op'd or misrouted every load attempt, JIT-or-no-JIT.
+
+Fixed by explicitly setting all three relevant fields (mirroring Android's own `m_applet_id{1}` convention):
+```cpp
+Service::AM::FrontendAppletParameters params{
+    .applet_id = Service::AM::AppletId::Application,
+    .applet_type = Service::AM::AppletType::Application,
+    .launch_type = Service::AM::LaunchType::FrontendInitiated,
+};
+```
+Also added `m_system.RegisterApplicationChangedCallback(...)` alongside the existing `RegisterExitCallback` registration, wiring disk-shader-cache reload to program changes the same way Android does.
+
+This is the most significant "make it actually boot" fix possible without device access — a real, verified compile-time/logic bug that would have blocked every title regardless of the JIT question. Shipped in CI run `34253594263`, uploaded to the `v0.0.1-unsigned-prealpha` GitHub release.
+
 ## Next steps, in priority order
 
 1. **Resolve the JIT question — now actually testable.** Sideload the unsigned IPA from CI run `34209056752` (or a newer one) onto a real device with your own Apple ID and confirm whether `mmap(MAP_JIT)` (or the CS_DEBUGGED-only R+X fallback muffin ended up using) actually succeeds. If it doesn't, the options are (a) find a working executable-memory strategy through more trial and error, matching what muffin had to do, or (b) build an actual non-NCE interpreter CPU backend for this codebase — currently absent — as a fallback. Neither is a small task; budget for it accordingly rather than assuming the declared entitlements alone solve this.
@@ -76,7 +92,7 @@ And per the JIT feasibility research done this session (see git history / sessio
 3. ~~Wire Metal rendering~~ — already done (see the corrected bullet above): `vulkan_surface.cpp`'s `Cocoa` branch + the generic Vulkan swapchain/present code is the whole path; no iOS-specific draw-call code is needed. What's left here is verification on a real device, not more code.
 4. ~~Wire the render loop~~ — deliberately not applicable: `RunEmulation`'s own comment explains why a `CADisplayLink`-fed tick would be wrong here — video_core's GPU thread drives presentation from the guest's own command submissions, with no per-frame callback dependency on any frontend.
 5. ~~Wire touch input~~ — already done: `MetalHostView` forwards `UITouch` through `AetherBridge` into `EmuWindow_iOS::OnTouchPressed/Moved/Released`.
-6. ~~Complete `InitializeEmulation`/`ConfigureFilesystemProvider`~~ — mostly done: HID device reload, exit-callback registration, disk shader cache preload/reload, and a real `StateCallback`-driven completion (`loadGameAtPath:completion:`) are all wired now; the applet-slot question turned out to already be handled safely by `Core::System::Impl::Initialize()`'s `SetDefaultAppletsIfMissing()` (verified by reading `core/core.cpp` directly, not assumed). What's left is a real on-screen iOS keyboard for the software-keyboard applet slot (currently gets the engine's own default stub, which never crashes but can't take real text input) — a UX gap, not a correctness one.
+6. ~~Complete `InitializeEmulation`/`ConfigureFilesystemProvider`~~ — mostly done: HID device reload, exit-callback registration, disk shader cache preload/reload, and a real `StateCallback`-driven completion (`loadGameAtPath:completion:`) are all wired now; the applet-slot question turned out to already be handled safely by `Core::System::Impl::Initialize()`'s `SetDefaultAppletsIfMissing()` (verified by reading `core/core.cpp` directly, not assumed). ~~`FrontendAppletParameters` left `applet_id` defaulted to `None`~~ — fixed, see "Boot-path bug fix" above; this was an actual boot blocker for every title, independent of JIT. What's left is a real on-screen iOS keyboard for the software-keyboard applet slot (currently gets the engine's own default stub, which never crashes but can't take real text input) — a UX gap, not a correctness one.
 7. **First real device test**: once 1 and 3–6 land, the actual first milestone is "a homebrew or retail title boots to a frame on a physical iPad/iPhone" — everything before this point is groundwork, not a demo.
 
 ## Files referenced
