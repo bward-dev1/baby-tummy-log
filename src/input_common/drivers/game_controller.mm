@@ -193,7 +193,7 @@ Common::Input::DriverResult GameController::SetVibration(
 
     GCController* controller = (__bridge GCController*)it->second;
     if (@available(iOS 14.0, *)) {
-        id<GCDeviceHaptics> haptics = controller.haptics;
+        GCDeviceHaptics* haptics = controller.haptics;
         if (haptics == nil) {
             return Common::Input::DriverResult::NotSupported;
         }

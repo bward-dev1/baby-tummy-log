@@ -62,6 +62,11 @@ elseif (IOS)
         drivers/game_controller.mm)
 
     target_compile_definitions(input_common PRIVATE IOS)
+    # ARC isn't on by default for CMake-built .mm files (only aetheremu-ios's own
+    # CMakeLists.txt enables it, see src/ios/CMakeLists.txt) -- game_controller.mm relies
+    # on it for __weak/__bridge_retained/__bridge_transfer.
+    set_source_files_properties(drivers/game_controller.mm PROPERTIES COMPILE_OPTIONS
+                                 "-fobjc-arc")
     target_link_libraries(input_common PRIVATE
         "-framework GameController"
         "-framework CoreHaptics")
