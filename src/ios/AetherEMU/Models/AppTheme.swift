@@ -4,10 +4,12 @@
 import SwiftUI
 
 enum AppTheme: String, CaseIterable, Identifiable {
-    case rail       // vertical side-rail layout
-    case dock       // bottom-dock layout with Folders
-    case lavaWarm   // full-width carousel, warm pink/orange/magenta lava-lamp background
-    case lavaCool   // full-width carousel, cool blue/teal/purple lava-lamp background
+    case rail           // vertical side-rail layout
+    case dock           // bottom-dock layout with Folders
+    case lavaWarm       // full-width carousel, warm pink/orange/magenta lava-lamp background
+    case lavaCool       // full-width carousel, cool blue/teal/purple lava-lamp background
+    case lavaVerticalRed   // vertical list layout, coral/rose/magenta lava-lamp background
+    case lavaVerticalBlue  // vertical list layout, periwinkle/teal/violet lava-lamp background
 
     var id: String { rawValue }
 
@@ -17,6 +19,8 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .dock: return "Dock"
         case .lavaWarm: return "Lava Lamp — Warm"
         case .lavaCool: return "Lava Lamp — Cool"
+        case .lavaVerticalRed: return "Lava Lamp — Vertical Red"
+        case .lavaVerticalBlue: return "Lava Lamp — Vertical Blue"
         }
     }
 
@@ -26,6 +30,8 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .dock: return "Full-width carousel with a floating bottom dock and Folders."
         case .lavaWarm: return "Soft floating color blobs over a warm pink/orange gradient."
         case .lavaCool: return "Soft floating color blobs over a cool blue/teal gradient."
+        case .lavaVerticalRed: return "A scrollable vertical list over a coral/rose/magenta gradient."
+        case .lavaVerticalBlue: return "A scrollable vertical list over a periwinkle/teal/violet gradient."
         }
     }
 
@@ -36,9 +42,13 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .dock:
             return LinearGradient(colors: [.pink, .orange, .yellow], startPoint: .topLeading, endPoint: .bottomTrailing)
         case .lavaWarm:
-            return LinearGradient(colors: [Color(red: 0.93, green: 0.29, blue: 0.55), Color(red: 0.98, green: 0.55, blue: 0.25)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            return LavaLampPalette.warm.base
         case .lavaCool:
-            return LinearGradient(colors: [Color(red: 0.29, green: 0.55, blue: 0.93), Color(red: 0.25, green: 0.85, blue: 0.75)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            return LavaLampPalette.cool.base
+        case .lavaVerticalRed:
+            return LavaLampPalette.verticalRed.base
+        case .lavaVerticalBlue:
+            return LavaLampPalette.verticalBlue.base
         }
     }
 }

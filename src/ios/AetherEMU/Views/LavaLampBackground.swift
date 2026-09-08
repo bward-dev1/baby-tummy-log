@@ -22,6 +22,34 @@ struct LavaLampPalette {
         ),
         blobs: [.white.opacity(0.35), .mint.opacity(0.4), .indigo.opacity(0.3)]
     )
+
+    // Three-stop diagonal (vs. warm/cool's two-stop) -- coral top-left, rose-pink
+    // center, magenta/orange bottom corners.
+    static let verticalRed = LavaLampPalette(
+        base: LinearGradient(
+            colors: [
+                Color(red: 0.96, green: 0.53, blue: 0.42),
+                Color(red: 0.91, green: 0.36, blue: 0.58),
+                Color(red: 0.76, green: 0.08, blue: 0.55),
+            ],
+            startPoint: .topLeading, endPoint: .bottomTrailing
+        ),
+        blobs: [.white.opacity(0.3), Color(red: 0.95, green: 0.62, blue: 0.35).opacity(0.4), .purple.opacity(0.35)]
+    )
+
+    // Three-stop diagonal -- periwinkle blue top, teal/green bottom-left, violet
+    // bottom-right.
+    static let verticalBlue = LavaLampPalette(
+        base: LinearGradient(
+            colors: [
+                Color(red: 0.42, green: 0.55, blue: 0.93),
+                Color(red: 0.38, green: 0.7, blue: 0.85),
+                Color(red: 0.55, green: 0.42, blue: 0.91),
+            ],
+            startPoint: .top, endPoint: .bottomTrailing
+        ),
+        blobs: [.white.opacity(0.3), .teal.opacity(0.4), .indigo.opacity(0.35)]
+    )
 }
 
 /// Soft, slowly-drifting translucent circles over a gradient -- the "lava lamp" look
