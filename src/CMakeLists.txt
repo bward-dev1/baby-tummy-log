@@ -297,7 +297,6 @@ endif()
 
 if (IOS)
     add_subdirectory(ios)
-    add_subdirectory(ios/AetherEMU)
 endif()
 
 include(GenerateDepHashes)
