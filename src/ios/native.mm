@@ -33,14 +33,18 @@
 #include <chrono>
 #include <utility>
 
+#include "common/fs/fs.h"
+#include "common/fs/path_util.h"
 #include "common/logging.h"
 #include "common/settings.h"
 #include "core/cpu_manager.h"
 #include "core/file_sys/content_archive.h"
+#include "core/file_sys/vfs/vfs.h"
 #include "core/file_sys/vfs/vfs_real.h"
 #include "core/hle/service/am/applet_manager.h"
 #include "core/hle/service/filesystem/filesystem.h"
 #include "core/loader/loader.h"
+#include "frontend_common/firmware_manager.h"
 #include "hid_core/hid_core.h"
 #include "video_core/gpu.h"
 #include "video_core/renderer_base.h"
@@ -55,6 +59,32 @@ EmulationSession::EmulationSession() {
 
 EmulationSession& EmulationSession::GetInstance() {
     return s_instance;
+}
+
+void EmulationSession::InitializeApplication(const std::string& app_support_dir) {
+    if (m_app_initialized) {
+        return;
+    }
+    m_app_initialized = true;
+
+    // Points every Common::FS::EdenPath (keys, NAND, saves, logs, ...) at the real
+    // sandboxed directory the caller chose (see path_util.cpp's TARGET_OS_IOS branch --
+    // without this, iOS's Reinitialize() ASSERTs on an empty path, exactly like Android's
+    // equivalent branch does when SetAppDirectory is never called).
+    Common::FS::SetAppDirectory(app_support_dir);
+    Common::FS::CreateEdenPaths();
+
+    // Was never called anywhere on iOS before this -- every LOG_INFO/LOG_ERROR call in
+    // this whole port was silently going nowhere. Mirrors Android's InitializeSystem
+    // (native.cpp): Initialize() creates the file backend (EdenPath::LogDir/eden_log.txt,
+    // see logging.cpp), the color console backend is genuinely useful when run/debugged
+    // from Xcode's console, and Start() begins the logger thread.
+    Common::Log::Initialize();
+    Common::Log::SetColorConsoleBackendEnabled(true);
+    Common::Log::Start();
+
+    LOG_INFO(Frontend, "EmulationSession::InitializeApplication: app_support_dir={}",
+              app_support_dir);
 }
 
 const Core::System& EmulationSession::System() const {
@@ -178,6 +208,100 @@ void EmulationSession::ConfigureFilesystemProvider(const std::string& filepath) 
                                      FileSys::GetCRTypeFromNCAType(FileSys::NCA{file}.GetType()),
                                      program_id, file);
     }
+}
+
+bool EmulationSession::InstallKeys(const std::string& prod_keys_path) {
+    // FirmwareManager::InstallKeys's non-Android branch is already platform-agnostic
+    // std::filesystem code (checks the filename ends with "prod.keys", looks alongside it
+    // for title.keys/key_retail.bin, copies whichever exist into EdenPath::KeysDir, then
+    // reloads Core::Crypto::KeyManager) -- no Qt/JNI involved, safe to call directly.
+    const auto result = FirmwareManager::InstallKeys(prod_keys_path, "prod.keys");
+    if (result != FirmwareManager::Success) {
+        LOG_ERROR(Frontend, "InstallKeys failed: {}", static_cast<int>(result));
+        return false;
+    }
+    LOG_INFO(Frontend, "InstallKeys succeeded from {}", prod_keys_path);
+    return true;
+}
+
+bool EmulationSession::InstallFirmware(const std::string& firmware_dir_path) {
+    // Reimplements QtCommon::Content::InstallFirmware's core logic (content.cpp) against
+    // this session's own m_system/m_vfs instead of Qt's global system/vfs pointers --
+    // that version also drives a Qt progress dialog and QFuture concurrency this doesn't
+    // need. Non-recursive by design: the common case (and the only one the Settings UI
+    // offers) is importing a flat folder of firmware NCAs, e.g. after the user extracts
+    // Nintendo's own firmware archive themselves -- recursive/zip-archive import is a
+    // real, documented gap (see SettingsView.swift), not something guessed at here.
+    {
+        // A user installing firmware as their very first action (before ever loading a
+        // game) would otherwise hit GetFileSystemController() with no factories created
+        // yet -- InitializeSystem() is idempotent (m_system_initialized), so this is safe
+        // to call unconditionally rather than assuming InitializeEmulation ran first.
+        std::scoped_lock lock(m_mutex);
+        InitializeSystem();
+    }
+
+    const std::filesystem::path firmware_source_path = firmware_dir_path;
+    if (!Common::FS::IsDir(firmware_source_path)) {
+        LOG_ERROR(Frontend, "InstallFirmware: {} is not a directory", firmware_dir_path);
+        return false;
+    }
+
+    std::vector<std::filesystem::path> nca_files;
+    const Common::FS::DirEntryCallable collect_ncas =
+        [&nca_files](const std::filesystem::directory_entry& entry) {
+            if (entry.path().has_extension() && entry.path().extension() == ".nca") {
+                nca_files.emplace_back(entry.path());
+            }
+            return true;
+        };
+    Common::FS::IterateDirEntries(firmware_source_path, collect_ncas,
+                                  Common::FS::DirEntryFilter::File);
+
+    if (nca_files.empty()) {
+        LOG_ERROR(Frontend, "InstallFirmware: no .nca files found in {}", firmware_dir_path);
+        return false;
+    }
+
+    auto sysnand_content_vdir = m_system.GetFileSystemController().GetSystemNANDContentDirectory();
+    if (!sysnand_content_vdir) {
+        LOG_ERROR(Frontend, "InstallFirmware: no system NAND content directory");
+        return false;
+    }
+    if (sysnand_content_vdir->IsWritable() &&
+        !sysnand_content_vdir->CleanSubdirectoryRecursive("registered")) {
+        LOG_ERROR(Frontend, "InstallFirmware: failed to clean the registered/ directory");
+        return false;
+    }
+
+    auto firmware_vdir = sysnand_content_vdir->GetDirectoryRelative("registered");
+    bool success = true;
+    for (const auto& nca_path : nca_files) {
+        auto src = m_vfs->OpenFile(nca_path.generic_string(), FileSys::OpenMode::Read);
+        auto dst = firmware_vdir->CreateFileRelative(nca_path.filename().string());
+        if (!src || !dst || !FileSys::VfsRawCopy(src, dst)) {
+            LOG_ERROR(Frontend, "InstallFirmware: failed to copy {}", nca_path.string());
+            success = false;
+        }
+    }
+
+    if (!success) {
+        return false;
+    }
+
+    // Re-scan the VFS for the newly placed firmware files, mirroring content.cpp.
+    m_system.GetFileSystemController().CreateFactories(*m_vfs);
+    LOG_INFO(Frontend, "InstallFirmware installed {} NCA file(s) from {}", nca_files.size(),
+              firmware_dir_path);
+    return true;
+}
+
+bool EmulationSession::HasFirmwareInstalled() {
+    return FirmwareManager::CheckFirmwarePresence(m_system);
+}
+
+std::string EmulationSession::GetLogDirectory() const {
+    return Common::FS::GetEdenPathString(Common::FS::EdenPath::LogDir);
 }
 
 Core::SystemResultStatus EmulationSession::InitializeEmulation(const std::string& filepath) {

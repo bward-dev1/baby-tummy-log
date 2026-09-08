@@ -88,6 +88,33 @@
     return self;
 }
 
+- (void)initializeApplication:(NSString *)appSupportDirectory {
+    EmulationSession::GetInstance().InitializeApplication(
+        std::string([appSupportDirectory UTF8String]));
+}
+
+- (BOOL)installKeysAtPath:(NSString *)prodKeysPath {
+    return EmulationSession::GetInstance().InstallKeys(std::string([prodKeysPath UTF8String]))
+              ? YES
+              : NO;
+}
+
+- (BOOL)installFirmwareAtPath:(NSString *)firmwareDirectory {
+    return EmulationSession::GetInstance().InstallFirmware(
+              std::string([firmwareDirectory UTF8String]))
+              ? YES
+              : NO;
+}
+
+- (BOOL)hasFirmwareInstalled {
+    return EmulationSession::GetInstance().HasFirmwareInstalled() ? YES : NO;
+}
+
+- (NSString *)logDirectory {
+    const std::string dir = EmulationSession::GetInstance().GetLogDirectory();
+    return [NSString stringWithUTF8String:dir.c_str()];
+}
+
 - (void)attachMetalLayer:(CAMetalLayer *)layer {
     os_unfair_lock_lock(&_surface.lock);
     _surface.layer = layer;

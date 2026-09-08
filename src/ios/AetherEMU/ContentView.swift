@@ -9,10 +9,12 @@ struct ContentView: View {
     // screen once set, per-theme layouts in HomeView (Rail) vs. DockHomeView (Dock).
     @AppStorage("aetheremu.appTheme") private var storedTheme: String?
 
-    @State private var games: [Game] = []
-    @State private var folders: [GameFolder] = []
+    // Owns the actual managed Games folder + persistence -- games/folders used to be
+    // plain @State, reset to empty on every relaunch. See GameLibrary.swift.
+    @StateObject private var library = GameLibrary()
     @State private var isPickingGame = false
     @State private var isRunning = false
+    @State private var isLoadingGame = false
     @State private var lastError: String?
     // Shown once per cold launch (not persisted -- reappears every fresh launch, like the
     // reference lock screen), and the shared full-library sheet every theme's .library
@@ -53,8 +55,8 @@ struct ContentView: View {
                 switch theme {
                 case .rail:
                     HomeView(
-                        games: $games,
-                        folders: $folders,
+                        games: $library.games,
+                        folders: $library.folders,
                         onPlay: loadGame,
                         onImportTapped: { isPickingGame = true },
                         onChangeTheme: { storedTheme = nil },
@@ -62,8 +64,8 @@ struct ContentView: View {
                     )
                 case .dock:
                     DockHomeView(
-                        games: $games,
-                        folders: $folders,
+                        games: $library.games,
+                        folders: $library.folders,
                         onPlay: loadGame,
                         onImportTapped: { isPickingGame = true },
                         onChangeTheme: { storedTheme = nil },
@@ -72,7 +74,7 @@ struct ContentView: View {
                 case .lavaWarm:
                     LavaLampHomeView(
                         palette: .warm,
-                        games: $games,
+                        games: $library.games,
                         onPlay: loadGame,
                         onImportTapped: { isPickingGame = true },
                         onChangeTheme: { storedTheme = nil },
@@ -81,7 +83,7 @@ struct ContentView: View {
                 case .lavaCool:
                     LavaLampHomeView(
                         palette: .cool,
-                        games: $games,
+                        games: $library.games,
                         onPlay: loadGame,
                         onImportTapped: { isPickingGame = true },
                         onChangeTheme: { storedTheme = nil },
@@ -90,7 +92,7 @@ struct ContentView: View {
                 case .lavaVerticalRed:
                     VerticalLavaLampHomeView(
                         palette: .verticalRed,
-                        games: $games,
+                        games: $library.games,
                         onPlay: loadGame,
                         onImportTapped: { isPickingGame = true },
                         onChangeTheme: { storedTheme = nil },
@@ -99,7 +101,7 @@ struct ContentView: View {
                 case .lavaVerticalBlue:
                     VerticalLavaLampHomeView(
                         palette: .verticalBlue,
-                        games: $games,
+                        games: $library.games,
                         onPlay: loadGame,
                         onImportTapped: { isPickingGame = true },
                         onChangeTheme: { storedTheme = nil },
@@ -108,7 +110,7 @@ struct ContentView: View {
                 case .lavaDark:
                     LavaLampHomeView(
                         palette: .dark,
-                        games: $games,
+                        games: $library.games,
                         onPlay: loadGame,
                         onImportTapped: { isPickingGame = true },
                         onChangeTheme: { storedTheme = nil },
@@ -117,7 +119,7 @@ struct ContentView: View {
                 case .lavaVerticalDark:
                     VerticalLavaLampHomeView(
                         palette: .dark,
-                        games: $games,
+                        games: $library.games,
                         onPlay: loadGame,
                         onImportTapped: { isPickingGame = true },
                         onChangeTheme: { storedTheme = nil },
@@ -138,12 +140,34 @@ struct ContentView: View {
                         .background(.red.opacity(0.8), in: RoundedRectangle(cornerRadius: 10))
                         .padding(.bottom, 24)
                 }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .animation(.spring(response: 0.4, dampingFraction: 0.8), value: lastError)
+            }
+
+            if isLoadingGame {
+                ZStack {
+                    Color.black.opacity(0.55).ignoresSafeArea()
+                    VStack(spacing: 14) {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .tint(.white)
+                            .scaleEffect(1.4)
+                        Text("Loading…")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.white.opacity(0.85))
+                    }
+                    .padding(28)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+                }
+                .transition(.opacity)
             }
 
             if !hasUnlocked {
                 LaunchLockView(onContinue: { hasUnlocked = true })
             }
         }
+        .animation(.easeInOut(duration: 0.25), value: isLoadingGame)
+        .animation(.easeInOut(duration: 0.3), value: theme)
         .fileImporter(isPresented: $isPickingGame, allowedContentTypes: Self.gameContentTypes) { result in
             switch result {
             case .success(let url):
@@ -155,7 +179,7 @@ struct ContentView: View {
         }
         .sheet(isPresented: $isShowingLibrary) {
             LibraryPageView(
-                games: games,
+                games: library.games,
                 onSelect: { game in
                     isShowingLibrary = false
                     loadGame(game)
@@ -166,35 +190,33 @@ struct ContentView: View {
     }
 
     private func addAndSelect(url: URL) {
-        let game = Game(title: url.deletingPathExtension().lastPathComponent, path: url)
-        games.append(game)
+        // Copies url into the app's own managed Games folder -- see GameLibrary's own
+        // comment for why. The source picker result is already security-scoped-
+        // accessible; importGame handles that grant itself.
+        if library.importGame(from: url) == nil {
+            lastError = "Couldn't import \(url.deletingPathExtension().lastPathComponent)."
+        }
     }
 
     private func loadGame(_ game: Game) {
-        // NX game files live outside the app sandbox until picked, so a security-scoped
-        // access grant is required before the C++ side can open the path -- see
-        // AetherBridge.mm's TODO on filepath handling going through NSURL bookmarks for
-        // the longer-term (re-open-without-repicking) story.
-        //
-        // loadGameAtPath:completion:'s load runs asynchronously on a background queue and
-        // only resolves once EmulationSession has actually opened the file (or failed to),
-        // so the security-scoped grant must stay open until that completion fires -- a
-        // `defer` here would release it the instant this function returns, before the
-        // async load even starts reading.
+        // Unlike the original pick-in-place design, game.path now always points inside
+        // this app's own sandbox (GameLibrary copies the file in at import time), so no
+        // security-scoped access dance is needed here at all -- the long-standing "NSURL
+        // bookmarks for re-open-without-repicking" TODO this used to carry is resolved by
+        // construction, not worked around.
         lastError = nil
-
-        guard game.path.startAccessingSecurityScopedResource() else {
-            lastError = "Couldn't access \(game.title)."
-            return
-        }
+        isLoadingGame = true
 
         AetherBridge.shared().loadGame(atPath: game.path.path) { result in
-            game.path.stopAccessingSecurityScopedResource()
+            isLoadingGame = false
             if result == .success {
-                self.isRunning = true
-                self.lastError = nil
+                library.markPlayed(game)
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    isRunning = true
+                }
+                lastError = nil
             } else {
-                self.lastError = "Failed to load \(game.title)."
+                lastError = "Failed to load \(game.title)."
             }
         }
     }

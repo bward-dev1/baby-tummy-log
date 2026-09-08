@@ -36,6 +36,43 @@ public:
     Core::System& System();
     InputCommon::InputSubsystem& GetInputSubsystem();
 
+    // One-time process bring-up: points Common::FS's EdenPath machinery at a real
+    // writable sandbox directory (Application Support, chosen by the caller) and starts
+    // the logging system. Must run before InitializeSystem/InitializeEmulation and before
+    // any InstallKeys/InstallFirmware call. Idempotent -- a second call is a harmless
+    // no-op, matching InitializeSystem's own m_system_initialized guard below.
+    //
+    // Previously never called on iOS at all (native.h's own InitializeSystem comment used
+    // to say logging bring-up "belongs in whatever iOS app-launch path constructs this
+    // singleton, not here" -- but nothing ever called it there either, so every LOG_INFO/
+    // LOG_ERROR call in this whole iOS port was silently going nowhere). AetherEMUApp.swift
+    // now calls this at app launch via AetherBridge.
+    void InitializeApplication(const std::string& app_support_dir);
+
+    // Copies prod.keys (and title.keys/key_retail.bin, if present alongside it) from
+    // `prod_keys_path` into EdenPath::KeysDir and reloads Core::Crypto::KeyManager.
+    // Mirrors FirmwareManager::InstallKeys's non-Android path directly (already
+    // platform-agnostic std::filesystem code, no Qt/JNI involved).
+    bool InstallKeys(const std::string& prod_keys_path);
+
+    // Copies every .nca file directly inside `firmware_dir_path` (non-recursive -- the
+    // common case is a flat folder of firmware NCAs, e.g. after extracting Nintendo's own
+    // firmware archive) into the emulated system NAND's registered-content directory,
+    // replacing whatever was there, then re-scans the VFS. Reimplements
+    // QtCommon::Content::InstallFirmware's core logic against this session's own
+    // m_system/m_vfs instead of Qt's global system/vfs pointers (that file also drives a
+    // Qt progress dialog and QFuture concurrency this doesn't need -- call from a
+    // background queue on the Swift side instead, same as loadGameAtPath:completion:).
+    bool InstallFirmware(const std::string& firmware_dir_path);
+
+    // Wraps FirmwareManager::CheckFirmwarePresence -- true once InstallFirmware has
+    // actually placed a Mii Edit applet NCA (or equivalent) in the system NAND.
+    bool HasFirmwareInstalled();
+
+    // The directory logs are written to (EdenPath::LogDir) -- AetherBridge exposes this
+    // so Swift can list/share the log files a user might attach to a bug report.
+    std::string GetLogDirectory() const;
+
     // NOTE(ios): neither accessor takes m_mutex -- an adversarial review pass flagged
     // that callers doing `if (!IsRunning()) return; ... Window()...` as two separate
     // unlocked steps (AetherBridge.mm's touch forwarding does exactly this) can race
@@ -126,6 +163,10 @@ private:
     // process-wide singleton done its one-time Core bring-up" rather than a real
     // reload-vs-first-launch distinction).
     bool m_system_initialized{false};
+    // Guards InitializeApplication above, the same way m_system_initialized guards
+    // InitializeSystem -- both are "has this process-wide singleton done its one-time
+    // bring-up" flags, not a reload/relaunch distinction.
+    bool m_app_initialized{false};
     std::atomic<bool> m_is_running = false;
     std::atomic<bool> m_is_paused = false;
     std::unique_ptr<FileSys::ManualContentProvider> m_manual_provider;

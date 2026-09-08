@@ -6,7 +6,7 @@ import Foundation
 /// A user-created grouping of games. AetherEMU has no metadata service to auto-sort
 /// games into genres/categories -- these are plain user-organized folders, not curated
 /// "Cozy/Chill"-style shelves (there's no data backing a claim like that).
-struct GameFolder: Identifiable, Hashable {
+struct GameFolder: Identifiable, Hashable, Codable {
     let id: UUID
     var name: String
     var gameIDs: [UUID]

@@ -28,6 +28,9 @@
 #endif
 
 #ifdef __APPLE__
+#include <TargetConditionals.h> // Used to distinguish iOS from macOS below (TARGET_OS_MAC is
+                                // true for BOTH -- this codebase already got burned by that
+                                // exact confusion once, see CMakeLists.txt's TARGET_OS_MAC comment)
 #include <sys/param.h> // Used in GetBundleDirectory()
 
 // CFURL contains __attribute__ directives that gcc does not know how to parse, so we need to just
@@ -127,6 +130,18 @@ public:
         LEGACY_PATH(Suyu, SUYU)
 #undef LEGACY_PATH
 #elif __ANDROID__
+        ASSERT(!eden_path.empty());
+        eden_path_cache = eden_path / CACHE_DIR;
+        eden_path_config = eden_path / CONFIG_DIR;
+#elif defined(__APPLE__) && TARGET_OS_IOS
+        // iOS has no writable location the desktop POSIX branch below would find: its
+        // "current directory" isn't the app's sandbox, and $XDG_DATA_HOME is never set --
+        // GetDataDirectory would fall through to $HOME/.local/share, which happens to be
+        // inside the sandbox (iOS does set $HOME) but was never verified as the right
+        // place to put ~2GB of NAND/firmware/save data. Mirrors Android's explicit
+        // app-directory-injection instead: the frontend (AetherBridge, at app launch)
+        // must call SetAppDirectory() with a real Application Support path before
+        // anything here runs, same contract Android already has.
         ASSERT(!eden_path.empty());
         eden_path_cache = eden_path / CACHE_DIR;
         eden_path_config = eden_path / CONFIG_DIR;

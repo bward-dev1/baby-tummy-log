@@ -8,7 +8,7 @@ import SwiftUI
 /// wouldn't be ours to bundle anyway -- so `accentHue` deterministically derives a
 /// per-game gradient from the title instead. Looks intentional, costs nothing, needs no
 /// network access at all.
-struct Game: Identifiable, Hashable {
+struct Game: Identifiable, Hashable, Codable {
     let id: UUID
     let title: String
     let path: URL
