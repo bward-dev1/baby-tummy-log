@@ -15,6 +15,13 @@ settings:
   SWIFT_OBJC_BRIDGING_HEADER: Bridge/AetherEMU-Bridging-Header.h
   CLANG_ENABLE_MODULES: 'YES'
   CLANG_ENABLE_OBJC_ARC: 'YES'
+  # The core headers AetherBridge.mm/emu_window.mm include use C++20 (concepts/requires,
+  # std::span) -- CMakeLists.txt sets CMAKE_CXX_STANDARD 20 for the CMake build, but
+  # Xcode compiles these files itself (see the HEADER_SEARCH_PATHS comment below) and
+  # defaults to an older standard, which fails with errors like "no template named
+  # 'span' in namespace 'std'" and "unknown type name 'requires'" -- a real CI failure
+  # this caught.
+  CLANG_CXX_LANGUAGE_STANDARD: 'gnu++20'
   # AetherBridge.mm includes core/core.h etc. directly -- these need to resolve the
   # same way they do for the CMake build (top-level CMakeLists.txt / src/*/CMakeLists.txt
   # target_include_directories), since Xcode compiles this file itself rather than
