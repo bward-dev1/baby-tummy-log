@@ -1,0 +1,48 @@
+name: iOS configure
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  configure-ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Xcode / SDK versions
+        run: |
+          xcodebuild -version
+          xcodebuild -showsdks
+
+      - name: Cache CPM downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/CPM
+          key: cpm-ios-${{ hashFiles('cpmfile.json') }}
+
+      - name: Configure (core only, no app target yet)
+        run: |
+          cmake -B build -G Xcode \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0 \
+            -DENABLE_QT=OFF \
+            -DYUZU_CMD=OFF \
+            -DBUILD_TESTING=OFF \
+            -DYUZU_TESTS=OFF \
+            -DENABLE_WEB_SERVICE=OFF \
+            -DENABLE_UPDATE_CHECKER=OFF \
+            -DUSE_DISCORD_PRESENCE=OFF \
+            -DENABLE_LIBUSB=OFF \
+            -DYUZU_ROOM=OFF
+
+      - name: Upload CMake logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cmake-logs
+          path: |
+            build/CMakeFiles/CMakeError.log
+            build/CMakeFiles/CMakeOutput.log
