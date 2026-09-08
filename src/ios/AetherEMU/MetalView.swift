@@ -105,16 +105,24 @@ final class MetalHostView: UIView {
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         super.touchesEnded(touches, with: event)
+        releaseTouches(touches)
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        // An adversarial review pass caught this forwarding into touchesEnded (which
+        // calls super.touchesEnded), mislabeling a system-cancelled touch sequence as a
+        // normal end to the UIResponder/gesture-recognizer chain -- call
+        // super.touchesCancelled directly instead, sharing only the emulator-side
+        // release logic (releaseTouches), same as Android's ACTION_CANCEL handling.
+        super.touchesCancelled(touches, with: event)
+        releaseTouches(touches)
+    }
+
+    private func releaseTouches(_ touches: Set<UITouch>) {
         for touch in touches {
             guard let id = touchIDs.removeValue(forKey: touch) else { continue }
             AetherBridge.shared().touchReleased(id)
         }
-    }
-
-    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-        // Same as Android's ACTION_CANCEL -- release on cancel too, don't leave a
-        // dangling pressed touch on the emulated touchscreen.
-        touchesEnded(touches, with: event)
     }
 }
 

@@ -78,6 +78,11 @@ EmuWindow_iOS& EmulationSession::Window() {
 }
 
 void EmulationSession::SetNativeSurface(AetherNativeSurface* native_surface) {
+    // An adversarial review pass caught this missing: InitializeEmulation and
+    // SurfaceChanged both read m_native_surface under m_mutex, but this write wasn't
+    // locked at all -- a genuine data race if attachMetalLayer's first call (main thread)
+    // ever coincides with InitializeEmulation constructing EmuWindow_iOS (emulation queue).
+    std::scoped_lock lock(m_mutex);
     m_native_surface = native_surface;
 }
 
@@ -328,6 +333,14 @@ void EmulationSession::ReloadDiskShaderCache(u64 program_id) {
     if (!Settings::values.use_disk_shader_cache.GetValue()) {
         return;
     }
+
+    // An adversarial review pass caught this missing: PauseEmulation/UnPauseEmulation
+    // hold m_mutex around the equivalent m_system.Pause()/Run() calls, but this function
+    // -- called from RunEmulation's wait loop after it releases its own lock -- didn't,
+    // letting a shader-cache reload race a user-initiated pause/resume (AetherBridge's
+    // -pause/-resume) touching the same Core::System pause/run state and GPU context
+    // concurrently with no mutual exclusion.
+    std::scoped_lock lock(m_mutex);
 
     LOG_INFO(Frontend, "Reloading disk shader cache for {:016X}", program_id);
 

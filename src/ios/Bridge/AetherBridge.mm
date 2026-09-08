@@ -20,19 +20,25 @@
 // would outlive the CAMetalLayer it points to the moment the hosting view (MetalHostView,
 // MetalView.swift) is torn down, since that view is the layer's only other owner.
 // detachMetalLayer below clears it explicitly before that happens. Access is guarded by
-// _surfaceLock since the emulation engine may eventually read this from its own queue
-// (see EmuWindow_iOS's TODOs) while the main thread calls attachMetalLayer/
+// _surface.lock (defined on the struct itself, native_surface.h -- see its comment for
+// why) since the emulation engine reads this from its own queue (EmuWindow_iOS::
+// OnSurfaceChanged, both via SurfaceChanged() below and directly from EmuWindow_iOS's
+// constructor on the emulation queue) while the main thread calls attachMetalLayer/
 // detachMetalLayer during ordinary view lifecycle events.
 
 @implementation AetherBridge {
     AetherNativeSurface _surface;
-    os_unfair_lock _surfaceLock;
     dispatch_queue_t _emulationQueue;
     // Set by loadGameAtPath:completion: just before dispatching the load, cleared and
     // invoked (on the main queue) by the StateCallback registered below once the real
-    // outcome is known. Read/written only on _emulationQueue or synchronously before a
-    // dispatch_async onto it, so dispatch's own memory barrier is enough -- no extra lock.
+    // outcome is known. An adversarial review pass caught that this was assumed to be
+    // "read/written only on _emulationQueue or synchronously before a dispatch_async onto
+    // it" -- true for loadGameAtPath:'s own write and InitializeEmulation's own path, but
+    // EmuWindow_iOS::OnFrameDisplayed (emu_window.mm) also calls into the StateCallback
+    // via OnEmulationStarted from whatever thread the GPU/video thread runs on, which is
+    // not necessarily _emulationQueue. Guarded by _pendingLoadCompletionLock instead.
     void (^_pendingLoadCompletion)(AetherLoadResult);
+    os_unfair_lock _pendingLoadCompletionLock;
 }
 
 + (instancetype)shared {
@@ -48,7 +54,8 @@
     self = [super init];
     if (self) {
         _emulationQueue = dispatch_queue_create("dev.aetheremu.emulation", DISPATCH_QUEUE_SERIAL);
-        _surfaceLock = OS_UNFAIR_LOCK_INIT;
+        _surface.lock = OS_UNFAIR_LOCK_INIT;
+        _pendingLoadCompletionLock = OS_UNFAIR_LOCK_INIT;
 
         // EmulationSession::OnEmulationStarted fires (synchronously, on _emulationQueue)
         // once InitializeEmulation actually succeeds -- this replaces the old
@@ -63,8 +70,10 @@
               if (strongSelf == nil) {
                   return;
               }
+              os_unfair_lock_lock(&strongSelf->_pendingLoadCompletionLock);
               void (^completion)(AetherLoadResult) = strongSelf->_pendingLoadCompletion;
               strongSelf->_pendingLoadCompletion = nil;
+              os_unfair_lock_unlock(&strongSelf->_pendingLoadCompletionLock);
               if (completion == nil) {
                   return;
               }
@@ -80,17 +89,17 @@
 }
 
 - (void)attachMetalLayer:(CAMetalLayer *)layer {
-    os_unfair_lock_lock(&_surfaceLock);
+    os_unfair_lock_lock(&_surface.lock);
     _surface.layer = layer;
-    os_unfair_lock_unlock(&_surfaceLock);
+    os_unfair_lock_unlock(&_surface.lock);
     EmulationSession::GetInstance().SetNativeSurface(&_surface);
     EmulationSession::GetInstance().SurfaceChanged();
 }
 
 - (void)detachMetalLayer {
-    os_unfair_lock_lock(&_surfaceLock);
+    os_unfair_lock_lock(&_surface.lock);
     _surface.layer = nil;
-    os_unfair_lock_unlock(&_surfaceLock);
+    os_unfair_lock_unlock(&_surface.lock);
 
     // An adversarial review pass caught this being missing: clearing _surface.layer
     // above only fixes AetherBridge's own copy. EmuWindow_iOS::window_info.render_surface
@@ -105,7 +114,9 @@
 
 - (void)loadGameAtPath:(NSString *)path completion:(void (^)(AetherLoadResult result))completion {
     std::string cpath = std::string([path UTF8String]);
+    os_unfair_lock_lock(&_pendingLoadCompletionLock);
     _pendingLoadCompletion = [completion copy];
+    os_unfair_lock_unlock(&_pendingLoadCompletionLock);
 
     // TODO(ios): InitializeEmulation is currently a best-effort, untested implementation
     // (see native.mm) -- calling it on the emulation queue rather than the caller's
@@ -132,8 +143,10 @@
           // InitializeEmulation returns early on failure without calling
           // OnEmulationStarted/OnEmulationStopped (see native.mm), so the state callback
           // never fires for this path -- resolve the completion directly instead.
+          os_unfair_lock_lock(&self->_pendingLoadCompletionLock);
           void (^failureCompletion)(AetherLoadResult) = self->_pendingLoadCompletion;
           self->_pendingLoadCompletion = nil;
+          os_unfair_lock_unlock(&self->_pendingLoadCompletionLock);
           if (failureCompletion != nil) {
               dispatch_async(dispatch_get_main_queue(), ^{
                 failureCompletion(AetherLoadResultFailure);

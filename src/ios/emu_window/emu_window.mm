@@ -6,6 +6,8 @@
 
 #include "ios/emu_window/emu_window.h"
 
+#include <os/lock.h>
+
 #include "common/logging.h"
 #include "input_common/drivers/touch_screen.h"
 #include "input_common/main.h"
@@ -22,7 +24,7 @@
 // whether vkCreateMetalSurfaceEXT actually succeeds against whatever Vulkan-on-Metal ICD
 // AetherEMU links on iOS are all unverified until CI is unblocked.
 void EmuWindow_iOS::OnSurfaceChanged(AetherNativeSurface* surface) {
-    if (!surface || !surface->layer) {
+    if (!surface) {
         LOG_INFO(Frontend, "EmuWindow_iOS::OnSurfaceChanged received null surface");
         m_window_width = 0;
         m_window_height = 0;
@@ -31,7 +33,26 @@ void EmuWindow_iOS::OnSurfaceChanged(AetherNativeSurface* surface) {
         return;
     }
 
+    // An adversarial review pass caught this reading surface->layer with no lock,
+    // racing AetherBridge.mm's attachMetalLayer/detachMetalLayer (which write it under
+    // surface->lock) -- this can run on the emulation queue (via SurfaceChanged() or
+    // EmuWindow_iOS's own constructor) concurrently with the main thread tearing the
+    // layer down. `lock` is shared on AetherNativeSurface itself (see native_surface.h)
+    // for exactly this reason. `layer` is copied into a strong local while locked, so
+    // it stays alive via ARC for the rest of this function even after unlocking.
+    os_unfair_lock_lock(&surface->lock);
     CAMetalLayer* layer = surface->layer;
+    os_unfair_lock_unlock(&surface->lock);
+
+    if (!layer) {
+        LOG_INFO(Frontend, "EmuWindow_iOS::OnSurfaceChanged received a surface with no layer");
+        m_window_width = 0;
+        m_window_height = 0;
+        window_info.render_surface = nullptr;
+        window_info.type = Core::Frontend::WindowSystemType::Headless;
+        return;
+    }
+
     m_window_width = static_cast<float>(layer.drawableSize.width);
     m_window_height = static_cast<float>(layer.drawableSize.height);
 

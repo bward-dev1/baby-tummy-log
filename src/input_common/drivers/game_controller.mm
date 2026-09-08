@@ -3,6 +3,7 @@
 
 #include "input_common/drivers/game_controller.h"
 
+#import <Foundation/Foundation.h>
 #import <GameController/GameController.h>
 #import <CoreHaptics/CoreHaptics.h>
 
@@ -62,32 +63,50 @@ void GameController::Init() {
 }
 
 void GameController::Shutdown() {
-    NSNotificationCenter* center = [NSNotificationCenter defaultCenter];
-    if (connect_observer != nullptr) {
-        id token = (__bridge_transfer id)connect_observer;
-        [center removeObserver:token];
-        connect_observer = nullptr;
-    }
-    if (disconnect_observer != nullptr) {
-        id token = (__bridge_transfer id)disconnect_observer;
-        [center removeObserver:token];
-        disconnect_observer = nullptr;
-    }
+    // An adversarial review pass caught this having zero synchronization against the
+    // GCController connect/disconnect notifications and the valueChangedHandler block,
+    // all of which run on the main queue (Init() registers them with
+    // [NSOperationQueue mainQueue], and GCExtendedGamepad's handler queue defaults to
+    // main too) -- if Shutdown()/~GameController() ever runs on a different thread (e.g.
+    // input subsystem teardown from a core-teardown thread), it could mutate
+    // connected_controllers/value_handlers concurrently with a main-thread callback, or
+    // tear down a GCController out from under a still-registered handler block invoking
+    // SetButton/SetAxis on `this`. Funnel the actual teardown through the main queue so
+    // it's serialized against every other touch point the same way.
+    void (^do_shutdown)(void) = ^{
+        NSNotificationCenter* center = [NSNotificationCenter defaultCenter];
+        if (connect_observer != nullptr) {
+            id token = (__bridge_transfer id)connect_observer;
+            [center removeObserver:token];
+            connect_observer = nullptr;
+        }
+        if (disconnect_observer != nullptr) {
+            id token = (__bridge_transfer id)disconnect_observer;
+            [center removeObserver:token];
+            disconnect_observer = nullptr;
+        }
 
-    for (auto& [port, handle] : connected_controllers) {
-        (void)port;
-        GCController* controller = (__bridge_transfer GCController*)handle;
-        controller.extendedGamepad.valueChangedHandler = nil;
-    }
-    connected_controllers.clear();
+        for (auto& [port, handle] : connected_controllers) {
+            (void)port;
+            GCController* controller = (__bridge_transfer GCController*)handle;
+            controller.extendedGamepad.valueChangedHandler = nil;
+        }
+        connected_controllers.clear();
 
-    for (auto& [port, handle] : value_handlers) {
-        (void)port;
-        // Release the retained block copy; the handler itself was already cleared above.
-        id block = (__bridge_transfer id)handle;
-        (void)block;
+        for (auto& [port, handle] : value_handlers) {
+            (void)port;
+            // Release the retained block copy; the handler itself was already cleared above.
+            id block = (__bridge_transfer id)handle;
+            (void)block;
+        }
+        value_handlers.clear();
+    };
+
+    if ([NSThread isMainThread]) {
+        do_shutdown();
+    } else {
+        dispatch_sync(dispatch_get_main_queue(), do_shutdown);
     }
-    value_handlers.clear();
 }
 
 void GameController::OnControllerConnected(void* gc_controller) {
@@ -96,6 +115,22 @@ void GameController::OnControllerConnected(void* gc_controller) {
         LOG_WARNING(Input, "Ignoring connected GCController with no extended gamepad profile");
         CFBridgingRelease(gc_controller);
         return;
+    }
+
+    // An adversarial review pass caught a real double-registration path: Init() manually
+    // enumerates [GCController controllers] for already-connected devices AND registers
+    // for GCControllerDidConnectNotification, so a controller that was already connected
+    // when Init() ran can be registered twice (once synchronously by the enumeration loop,
+    // once again when the queued notification for that same connect event fires) --
+    // leaving a "zombie" port that OnControllerDisconnected's break-at-first-match never
+    // cleans up on the real physical disconnect. Dedup by pointer identity instead of
+    // creating a second port for an already-registered controller.
+    for (const auto& [existing_port, handle] : connected_controllers) {
+        (void)existing_port;
+        if ((__bridge GCController*)handle == controller) {
+            CFBridgingRelease(gc_controller);
+            return;
+        }
     }
 
     const size_t port = next_port++;

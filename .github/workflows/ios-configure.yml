@@ -22,7 +22,14 @@ jobs:
       - name: Cache CPM downloads
         uses: actions/cache@v4
         with:
-          path: ~/.cache/CPM
+          # An adversarial review pass caught this: CMakeLists.txt sets CPM_SOURCE_CACHE
+          # to ${CMAKE_SOURCE_DIR}/.cache/cpm (repo-relative, lowercase -- confirmed
+          # against CPMUtil.cmake's own default), not ~/.cache/CPM (home dir, uppercase).
+          # This key was a guaranteed cache miss on every run: nothing was ever restored
+          # or saved, so every dependency (boost/openssl-ci/fmt/moltenvk-ios/...) was
+          # re-downloaded from scratch each time -- silently, with no visible error, since
+          # a full cold build still succeeds. Doesn't affect correctness, only CI speed.
+          path: .cache/cpm
           key: cpm-ios-${{ hashFiles('cpmfile.json') }}
 
       - name: Configure (core only, no app target yet)

@@ -147,6 +147,7 @@ struct ContentView: View {
         .fileImporter(isPresented: $isPickingGame, allowedContentTypes: Self.gameContentTypes) { result in
             switch result {
             case .success(let url):
+                lastError = nil
                 addAndSelect(url: url)
             case .failure(let error):
                 lastError = error.localizedDescription
@@ -180,6 +181,8 @@ struct ContentView: View {
         // so the security-scoped grant must stay open until that completion fires -- a
         // `defer` here would release it the instant this function returns, before the
         // async load even starts reading.
+        lastError = nil
+
         guard game.path.startAccessingSecurityScopedResource() else {
             lastError = "Couldn't access \(game.title)."
             return
