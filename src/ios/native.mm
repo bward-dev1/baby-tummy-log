@@ -10,11 +10,13 @@
 
 #include "common/logging.h"
 #include "common/settings.h"
+#include "core/cpu_manager.h"
 #include "core/file_sys/content_archive.h"
 #include "core/file_sys/vfs/vfs_real.h"
 #include "core/hle/service/am/applet_manager.h"
 #include "core/hle/service/filesystem/filesystem.h"
 #include "core/loader/loader.h"
+#include "hid_core/hid_core.h"
 
 namespace {
 EmulationSession s_instance;
@@ -53,7 +55,16 @@ void EmulationSession::SetNativeSurface(AetherNativeSurface* native_surface) {
 }
 
 void EmulationSession::SurfaceChanged() {
-    if (!IsRunning()) {
+    // Locking m_mutex here (an adversarial review pass caught this missing) matters for
+    // two things at once: it serializes against InitializeEmulation, which constructs
+    // m_window and later calls GPU().Start() (reading window_info) while holding this
+    // same mutex -- without the lock, a resize/rotation landing on the main thread
+    // during startup could write window_info concurrently with that read. It also
+    // avoids racing ShutdownEmulation's m_window.reset() (also under m_mutex) --
+    // currently unreachable since nothing calls ShutdownEmulation yet, but this closes
+    // that race preemptively rather than leaving it for whoever wires up teardown.
+    std::scoped_lock lock(m_mutex);
+    if (!m_is_running || !m_window) {
         return;
     }
     m_window->OnSurfaceChanged(m_native_surface);
@@ -74,12 +85,26 @@ const Core::PerfStatsResults& EmulationSession::PerfStats() {
 
 void EmulationSession::InitializeSystem() {
     // TODO(ios): Mirrors the non-JNI portion of Android's InitializeSystem(bool reload) --
-    // filesystem/content-provider bring-up. Skips Android's `!reload` branch (log-system
-    // Common::Log::Initialize/Start + m_input_subsystem.Initialize()): those are one-time
-    // process bring-up steps that belong in whatever iOS app-launch path constructs this
-    // singleton, not here, and there is no `reload` concept on iOS yet (no re-launch/
-    // program-select flow exists). Revisit if iOS grows a reload path that needs to skip
-    // re-registering the content provider.
+    // filesystem/content-provider bring-up. Skips Android's `!reload` branch inside that
+    // function (log-system Common::Log::Initialize/Start + m_input_subsystem.Initialize()):
+    // those are one-time process bring-up steps that belong in whatever iOS app-launch
+    // path constructs this singleton, not here, and there is no `reload` concept on iOS
+    // yet (no re-launch/program-select flow exists). Revisit if iOS grows a reload path
+    // that needs to skip re-registering the content provider.
+    //
+    // An adversarial review pass caught a separate, real gap here: Android's JNI
+    // initializeSystem wrapper ALSO calls `System().Initialize()` directly (outside
+    // EmulationSession::InitializeSystem entirely) on first launch -- that call was never
+    // ported to iOS at all. It wasn't crashing only because Core::System::Impl::Load()
+    // lazily calls Initialize() itself the first time (ReinitializeIfNecessary() checks an
+    // unpopulated device_memory optional) -- an internal fallback for a changed
+    // multicore/memory-layout setting mid-session, not a substitute for this one-time
+    // bring-up call. Calling it explicitly here, once, matches Android's intent.
+    if (!m_system_initialized) {
+        m_system.Initialize();
+        m_system_initialized = true;
+    }
+
     m_system.SetFilesystem(m_vfs);
     m_system.GetUserChannel().clear();
     m_manual_provider = std::make_unique<FileSys::ManualContentProvider>();
