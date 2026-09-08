@@ -40,15 +40,21 @@ done < <(find "$BUILD_DIR" -name '*.a' -not -path '*/CMakeFiles/*' -print0)
 
 # Not everything CMake links against is actually compiled by this build -- moltenvk-ios
 # is a downloaded prebuilt xcframework (see externals/CMakeLists.txt's MOLTENVK_LIBRARY),
-# and CPM's get_cache_path() (CMakeModules/CPMUtil.cmake) resolves it to
-# .cache/cpm/moltenvk-ios/<version>/..., entirely outside build/ -- confirmed by reading
-# that CMake logic directly, not guessed. Sweep the whole CPM cache for prebuilt .a/.xcframework
-# static libs too, so this doesn't silently produce a binary missing Vulkan/Metal symbols.
+# and openssl-ci (CMakeLists.txt's `if (YUZU_USE_BUNDLED_OPENSSL) AddJsonPackage(openssl-ci)`
+# branch, which iOS takes) is a downloaded prebuilt static-lib package too -- both resolve
+# via CPM's get_cache_path() (CMakeModules/CPMUtil.cmake) to .cache/cpm/<name>/<version>/...,
+# entirely outside build/. Originally this only swept *.xcframework/*.a (moltenvk-ios's
+# actual layout), which silently missed openssl-ci's plain .a files (not inside an
+# xcframework bundle) -- a real CI failure caught this: dozens of undefined OpenSSL
+# symbols (BIO_*/EVP_*/BN_*) at link time, meaning the whole library was absent from
+# link-flags.txt, not just a few object files. Sweep the whole CPM cache for any .a now,
+# not just ones under an xcframework, so no future CPM-provided prebuilt static lib can
+# go missing the same way.
 if [[ -d "$CPM_CACHE_DIR" ]]; then
     while IFS= read -r -d '' lib; do
         printf '%q\n' "$lib" >> "$OUT_FILE"
         found_any=1
-    done < <(find "$CPM_CACHE_DIR" -path '*.xcframework/*' -name '*.a' -print0)
+    done < <(find "$CPM_CACHE_DIR" -name '*.a' -print0)
 fi
 
 if [[ "$found_any" -eq 0 ]]; then

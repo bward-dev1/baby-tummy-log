@@ -4,6 +4,21 @@
 // SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Every other platform's entry point defines VMA_IMPLEMENTATION exactly once to
+// actually compile Vulkan Memory Allocator's function bodies (it's a single-header
+// library, header-only until something does this) -- yuzu/main_window.cpp (Qt),
+// yuzu_cmd/yuzu.cpp (CLI), android/app/src/main/jni/native.cpp (Android). iOS had none,
+// which a real CI link failure caught: "_vmaInvalidateAllocation"/"_vmaUnmapMemory"
+// undefined, referenced from video_core's own vulkan_wrapper.o/vulkan_memory_allocator.o
+// -- not a missing-library linker-flags problem (those .o files DO get compiled and
+// archived into libvideo_core.a; the vma* symbols they call just never existed
+// anywhere in the whole link, since nothing on this platform ever defined
+// VMA_IMPLEMENTATION). native.mm is EmulationSession's own translation unit and the
+// sole iOS entry point, so this is the correct (and only) place for it on this
+// platform, mirroring the other platforms' pattern exactly.
+#define VMA_IMPLEMENTATION
+#include "video_core/vulkan_common/vma.h"
+
 #include "ios/native.h"
 
 #include <chrono>
