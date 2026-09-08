@@ -337,11 +337,22 @@ Core::SystemResultStatus EmulationSession::InitializeEmulation(const std::string
 
     ConfigureFilesystemProvider(filepath);
 
-    // TODO(ios): applet_id/launch_type/program_index should come from real frontend
-    // state (which title is being launched, whether it's a sub-program relaunch) once
-    // there's an app UI driving this -- Android's equivalent builds this from JNI call
-    // arguments. Defaults here are enough to make the call shape compile/link.
-    Service::AM::FrontendAppletParameters params{};
+    // A default-constructed FrontendAppletParameters was a real, confirmed boot-blocking
+    // bug, not just an honest stub: applet_id{} value-initializes to AppletId::None (0x00),
+    // and applet_manager.cpp's CreateApplet reads `params.applet_id == AppletId::Application`
+    // directly as the "is this actually the game, not some other applet" flag passed to the
+    // new Applet's constructor -- with None, the freshly-loaded game process would never be
+    // treated as the application at all, regardless of whether the load/JIT/rendering below
+    // succeeds. program_id/program_index/previous_program_index (sub-program relaunch state)
+    // remain a real TODO -- there's no frontend UI driving those yet -- but applet_id/
+    // applet_type/launch_type need to be correct for ANY title to boot as a game, not just
+    // for the sub-program-relaunch case, so they're set explicitly here rather than left
+    // default-constructed. Mirrors Android's own default (m_applet_id{1} == Application).
+    Service::AM::FrontendAppletParameters params{
+        .applet_id = Service::AM::AppletId::Application,
+        .applet_type = Service::AM::AppletType::Application,
+        .launch_type = Service::AM::LaunchType::FrontendInitiated,
+    };
     m_load_result = m_system.Load(*m_window, filepath, params);
     if (m_load_result != Core::SystemResultStatus::Success) {
         return m_load_result;
@@ -350,6 +361,13 @@ Core::SystemResultStatus EmulationSession::InitializeEmulation(const std::string
     m_system.GPU().Start();
     m_system.GetCpuManager().OnGpuReady();
     m_system.RegisterExitCallback([&] { HaltEmulation(); });
+
+    // Mirrors Android's equivalent registration -- without this, RequestDiskShaderCacheReload
+    // (native.h) had no caller anywhere in this codebase, so a title changing its running
+    // program (DLC, some multi-program titles) would never actually trigger the reload path
+    // RunEmulation's wait loop already implements.
+    m_system.RegisterApplicationChangedCallback(
+        [this](u64 changed_program_id) { RequestDiskShaderCacheReload(changed_program_id); });
 
     OnEmulationStarted();
     return Core::SystemResultStatus::Success;
