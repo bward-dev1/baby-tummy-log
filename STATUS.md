@@ -2,11 +2,11 @@
 
 An iOS port of the [Eden Switch emulator](https://git.eden-emu.dev/eden-emu/eden) (itself a yuzu fork). This document is the honest ceiling, not a pitch — it says what's actually implemented, what's a stub, and what nothing has confirmed yet. When in doubt, read the code's own comments; they're more current than this file will ever be.
 
-Last updated: 2026-09-07, against `git log` HEAD `67448de`.
+Last updated: 2026-09-08, against `git log` HEAD `3a83344`.
 
 ## The one-line truth
 
-**Nothing has been confirmed running on a device yet, but the known blockers to a first frame are now fixed rather than just documented.** The core Metal/Vulkan surface bug that made rendering impossible (`WindowSystemType::Headless` instead of `Cocoa` — see below) is fixed and independently verified against the actual Vulkan WSI code. Touch input and real emulation bring-up (content-provider registration, GPU thread start) are wired. A CI build is in flight (see "CI status") for the first real pass/fail signal on all of this. Guest code execution on iOS still depends entirely on JIT (`mmap(MAP_JIT)`) actually working under a sideloaded signature, which remains unconfirmed (see "JIT status") — that is unrelated to and unaffected by today's rendering/input work.
+**Nothing has been confirmed running on a device yet, but the known blockers to a first frame are now fixed rather than just documented.** The core Metal/Vulkan surface bug that made rendering impossible (`WindowSystemType::Headless` instead of `Cocoa` — see below) is fixed and independently verified against the actual Vulkan WSI code. Touch input, gamepad/MFi controller input (`InputCommon::GameController`, new), and real emulation bring-up (content-provider registration, GPU thread start) are wired. A CI build is in flight (see "CI status") for the first real pass/fail signal on all of this. Guest code execution on iOS still depends entirely on JIT (`mmap(MAP_JIT)`) actually working under a sideloaded signature, which remains unconfirmed (see "JIT status") — that is unrelated to and unaffected by today's rendering/input work.
 
 ## CI status — in flight, GitHub Actions billing bypassed via a temporary public mirror
 
@@ -44,7 +44,7 @@ Net result: the core CMake configure+build step in CI is intended to produce sta
 ## What is explicitly NOT implemented yet
 
 - **No Metal rendering.** `MetalHostView` exists and hands its `CAMetalLayer` down to `AetherBridge`/`EmulationSession`, but nothing on the C++ side (`GraphicsContext_iOS`, `video_core`) reads that layer to build a `CAMetalDrawable` or issue a single draw call. `AetherBridge.mm`'s own comment says this directly: *"EmuWindow_iOS/GraphicsContext_iOS never dereference it today... when Metal rendering is wired up, whatever reads the layer... will need to move into an .mm file."*
-- **No touch or gamepad input.** `EmuWindow_iOS::OnTouchPressed/Moved/Released` are unimplemented signatures with a TODO to wire to UIKit `UITouch` forwarding. There is no gamepad/MFi controller integration at all.
+- **Touch is wired; gamepad/MFi is now wired too (untested on device).** `MetalHostView` forwards `UITouch` through `AetherBridge` into `EmuWindow_iOS::OnTouchPressed/Moved/Released`. `InputCommon::GameController` (`src/input_common/drivers/game_controller.h`/`.mm`) registers for GCControllerDidConnect/Disconnect, forwards `GCExtendedGamepad` button/stick state on every `valueChangedHandler` callback, and implements CoreHaptics-based vibration (iOS 14+) — registered into `InputSubsystem` under a new `elseif (IOS)` CMake branch. None of this has run on a physical controller/device yet; it's compiled-against-the-interface-contract only, same caveat as everything else in this doc until CI/device confirm it.
 - **No real game loading.** `EmulationSession::InitializeEmulation` in `native.mm` is, per its own comment, a stub: *"This stub only stands up the window and attempts a core load so the bridge has a real (if incomplete) call path to build against."* It's missing software-keyboard/applet setup, HID device reload, and program-select/exit callback wiring that Android's equivalent has. `ConfigureFilesystemProvider` is similarly a stub missing the `ManualContentProvider` container-entry scan. No file has ever actually been loaded through this path on real hardware — it's untested even in principle since nothing draws or accepts input yet.
 - **No render loop.** `RunEmulation()` calls `m_system.Run()` directly rather than driving frames from a `CADisplayLink`, per its own TODO.
 - **No frontend callback wiring.** `OnEmulationStarted`/`OnEmulationStopped` just log; there's no delegate/block callback back into Swift, so the SwiftUI layer can't currently learn whether a load actually succeeded — `AetherBridge.loadGameAtPath:` returns success unconditionally, before the async load has even attempted anything.
@@ -72,7 +72,6 @@ And per the JIT feasibility research done this session (see git history / sessio
 5. **Wire touch input**: forward `UITouch` events from `MetalHostView` through to `EmuWindow_iOS::OnTouchPressed/Moved/Released`.
 6. **Complete `InitializeEmulation`/`ConfigureFilesystemProvider`**: applet/HID setup, exit-callback wiring, and a real completion callback from `EmulationSession` back through `AetherBridge` to SwiftUI (so `loadGameAtPath:` can report real success/failure instead of guessing).
 7. **First real device test**: once 1 and 3–6 land, the actual first milestone is "a homebrew or retail title boots to a frame on a physical iPad/iPhone" — everything before this point is groundwork, not a demo.
-8. **Gamepad/MFi controller support** — after touch input works.
 
 ## Files referenced
 
@@ -84,3 +83,5 @@ And per the JIT feasibility research done this session (see git history / sessio
 - `/Users/staceylynward/AetherEMU/src/ios/AetherEMU/` (SwiftUI shell, Models, Theme, Views)
 - `/Users/staceylynward/AetherEMU/src/ios/AetherEMU.entitlements`
 - `/Users/staceylynward/AetherEMU/src/ios/project.yml`, `CMakeLists.txt`
+- `/Users/staceylynward/AetherEMU/src/input_common/drivers/game_controller.h`, `game_controller.mm`
+- `/Users/staceylynward/AetherEMU/src/input_common/main.h`, `main.cpp`, `CMakeLists.txt`
