@@ -34,6 +34,7 @@ enum Values : int;
 namespace InputCommon {
 class Android;
 class Camera;
+class GameController;
 class Keyboard;
 class Mouse;
 class TouchScreen;
@@ -112,6 +113,12 @@ public:
 
     /// Retrieves the underlying android input device.
     [[nodiscard]] const Android* GetAndroid() const;
+
+    /// Retrieves the underlying iOS/iPadOS GameController.framework input device.
+    [[nodiscard]] GameController* GetGameController();
+
+    /// Retrieves the underlying iOS/iPadOS GameController.framework input device.
+    [[nodiscard]] const GameController* GetGameController() const;
 
     /// Retrieves the underlying virtual amiibo input device.
     [[nodiscard]] VirtualAmiibo* GetVirtualAmiibo();

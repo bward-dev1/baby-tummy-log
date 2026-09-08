@@ -53,6 +53,18 @@ if (ANDROID)
         drivers/android.h)
 
     target_link_libraries(input_common PRIVATE android)
+elseif (IOS)
+    # iOS has no SDL3/joycon/gc_adapter support (no USB host access, no SDL3 GameController
+    # backend needed) -- MFi/PS/Xbox controllers are handled directly via Apple's
+    # GameController.framework instead, mirroring how ANDROID gets its own dedicated driver above.
+    target_sources(input_common PRIVATE
+        drivers/game_controller.h
+        drivers/game_controller.mm)
+
+    target_compile_definitions(input_common PRIVATE IOS)
+    target_link_libraries(input_common PRIVATE
+        "-framework GameController"
+        "-framework CoreHaptics")
 else()
     target_sources(input_common PRIVATE
         drivers/joycon.cpp

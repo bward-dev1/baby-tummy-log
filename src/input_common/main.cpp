@@ -34,6 +34,10 @@
 #include "input_common/drivers/android.h"
 #endif
 
+#ifdef IOS
+#include "input_common/drivers/game_controller.h"
+#endif
+
 namespace InputCommon {
 
 /// Dummy engine to get periodic updates
@@ -88,6 +92,10 @@ struct InputSubsystem::Impl {
 #ifdef __ANDROID__
         RegisterEngine("android", android);
 #endif
+#ifdef IOS
+        RegisterEngine("game_controller", game_controller);
+        game_controller->Init();
+#endif
         RegisterEngine("virtual_amiibo", virtual_amiibo);
         RegisterEngine("virtual_gamepad", virtual_gamepad);
 #ifdef HAVE_SDL3
@@ -122,6 +130,10 @@ struct InputSubsystem::Impl {
 #ifdef __ANDROID__
         UnregisterEngine(android);
 #endif
+#ifdef IOS
+        game_controller->Shutdown();
+        UnregisterEngine(game_controller);
+#endif
         UnregisterEngine(virtual_amiibo);
         UnregisterEngine(virtual_gamepad);
 #ifdef HAVE_SDL3
@@ -147,6 +159,10 @@ struct InputSubsystem::Impl {
 #ifdef __ANDROID__
         auto android_devices = android->GetInputDevices();
         devices.insert(devices.end(), android_devices.begin(), android_devices.end());
+#endif
+#ifdef IOS
+        auto game_controller_devices = game_controller->GetInputDevices();
+        devices.insert(devices.end(), game_controller_devices.begin(), game_controller_devices.end());
 #endif
 #ifdef ENABLE_LIBUSB
         auto gcadapter_devices = gcadapter->GetInputDevices();
@@ -179,6 +195,11 @@ struct InputSubsystem::Impl {
 #ifdef __ANDROID__
         if (engine == android->GetEngineName()) {
             return android;
+        }
+#endif
+#ifdef IOS
+        if (engine == game_controller->GetEngineName()) {
+            return game_controller;
         }
 #endif
 #ifdef ENABLE_LIBUSB
@@ -266,6 +287,11 @@ struct InputSubsystem::Impl {
             return true;
         }
 #endif
+#ifdef IOS
+        if (engine == game_controller->GetEngineName()) {
+            return true;
+        }
+#endif
 #ifdef ENABLE_LIBUSB
         if (engine == gcadapter->GetEngineName()) {
             return true;
@@ -297,6 +323,9 @@ struct InputSubsystem::Impl {
 #ifdef __ANDROID__
         android->BeginConfiguration();
 #endif
+#ifdef IOS
+        game_controller->BeginConfiguration();
+#endif
 #ifdef ENABLE_LIBUSB
         gcadapter->BeginConfiguration();
 #endif
@@ -312,6 +341,9 @@ struct InputSubsystem::Impl {
         mouse->EndConfiguration();
 #ifdef __ANDROID__
         android->EndConfiguration();
+#endif
+#ifdef IOS
+        game_controller->EndConfiguration();
 #endif
 #ifdef ENABLE_LIBUSB
         gcadapter->EndConfiguration();
@@ -357,6 +389,10 @@ struct InputSubsystem::Impl {
 
 #ifdef __ANDROID__
     std::shared_ptr<Android> android;
+#endif
+
+#ifdef IOS
+    std::shared_ptr<GameController> game_controller;
 #endif
 };
 
@@ -419,6 +455,16 @@ Android* InputSubsystem::GetAndroid() {
 
 const Android* InputSubsystem::GetAndroid() const {
     return impl->android.get();
+}
+#endif
+
+#ifdef IOS
+GameController* InputSubsystem::GetGameController() {
+    return impl->game_controller.get();
+}
+
+const GameController* InputSubsystem::GetGameController() const {
+    return impl->game_controller.get();
 }
 #endif
 
