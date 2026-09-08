@@ -6,7 +6,7 @@ Last updated: 2026-09-07, against `git log` HEAD `40ada1c` (40 commits since the
 
 ## The one-line truth
 
-**Nothing has run on a device or in a simulator.** The core library and the app-target scaffold both build far enough to be interesting, but CI has never finished an end-to-end build (see "CI status" below), and even if it had, the app does not yet draw a frame, take touch input, or load a game. This is a pre-alpha port: real engineering progress on the hard cross-compilation problems, zero playable behavior.
+**Nothing has run on a device or in a simulator, and it isn't yet clear it can.** The core library and the app-target scaffold both build far enough to be interesting, but CI has never finished an end-to-end build (see "CI status" below), the app does not yet draw a frame, take touch input, or load a game — and, as of this correction, guest code execution on iOS depends entirely on JIT (`mmap(MAP_JIT)`) actually working under a sideloaded signature, which has never been confirmed here or on the sibling project this approach is modeled on (see "JIT status"). This is a pre-alpha port: real engineering progress on the hard cross-compilation problems, and one unresolved, load-bearing open question underneath all of it.
 
 ## CI status — currently blocked, not currently green
 
@@ -47,26 +47,30 @@ Net result: the core CMake configure+build step in CI is intended to produce sta
 - **No render loop.** `RunEmulation()` calls `m_system.Run()` directly rather than driving frames from a `CADisplayLink`, per its own TODO.
 - **No frontend callback wiring.** `OnEmulationStarted`/`OnEmulationStopped` just log; there's no delegate/block callback back into Swift, so the SwiftUI layer can't currently learn whether a load actually succeeded — `AetherBridge.loadGameAtPath:` returns success unconditionally, before the async load has even attempted anything.
 
-## JIT status
+## JIT status — CORRECTED: JIT is not optional, it's the only CPU backend iOS has
 
-**JIT-less/interpreter is the only claimed-working execution path.** This isn't a gap to fill later so much as the deliberate current default: `HAS_NCE` is left off for iOS in the top-level `CMakeLists.txt` specifically so the interpreter path runs regardless of what the entitlements below claim.
+An earlier version of this document (and of commit `88c03d0`'s message/comment) claimed iOS falls back to "the interpreter (JIT-less) path" once `HAS_NCE` is disabled. **That was wrong**, caught by an adversarial review pass and independently re-verified by reading the actual selection logic:
 
-The JIT entitlements in `src/ios/AetherEMU.entitlements` (`com.apple.security.cs.allow-jit`, `com.apple.security.cs.disable-executable-page-protection`, `dynamic-codesigning`, `get-task-allow`) are declared but **unconfirmed** — the file's own comment is the honest statement of the situation and shouldn't be improved on:
+- `src/common/settings_enums.h:141`: `ENUM(CpuBackend, Dynarmic, Nce);` — those are the only two values that exist.
+- `src/common/settings.h`'s `cpu_backend` default: `#ifdef HAS_NCE` → `CpuBackend::Nce`, `#else` → `CpuBackend::Dynarmic`. There is no third, interpreter option.
+- Dynarmic is a JIT recompiler (`src/dynarmic/src/dynarmic/backend/{x64,arm64,riscv64,loongarch64}/` are all JIT code emitters, mapping executable pages and generating machine code at runtime). It has no standalone interpreter mode in this codebase. The only ARM interpreter that exists anywhere in this tree (`src/core/arm/nce/interpreter_visitor.cpp`) lives *inside* NCE itself, as NCE's own instruction-emulation fallback — it is not reachable when `HAS_NCE` is undefined.
 
-> "These declare intent for MAP_JIT; they are not a confirmed way to get JIT working on iOS. `get-task-allow` / `CS_DEBUGGED` (set by sideloading tools like SideStore/AltStore via a momentary debugger attach at launch) is necessary but may not be sufficient on its own for `mmap(MAP_JIT)` to succeed... Whether this does anything depends on how whatever tool signs/re-signs this app handles entitlement injection, which this repo doesn't control... JIT here is aspirational, not load-bearing."
+**Consequence: with `HAS_NCE` correctly excluded on iOS, Dynarmic (JIT) is the only CPU backend iOS has. There is no non-JIT way to run guest code in this codebase today.** The JIT entitlements in `src/ios/AetherEMU.entitlements` are therefore **load-bearing, not aspirational** — if `mmap(MAP_JIT)` doesn't work under whatever tool signs/sideloads this app, nothing runs, full stop.
 
-In short: even if JIT somehow worked, the core doesn't currently try to use it on iOS (`HAS_NCE` is off), so the entitlements exist for a future where the CPU-emulation backend is revisited — not for anything active today.
+And per the JIT feasibility research done this session (see git history / session notes — not yet a separate doc), the sibling project cemu-ios-muffin's own real-device test of this exact mechanism found: `CS_DEBUGGED` was set, `mprotect(R+X)` succeeded, but `mmap(MAP_JIT)` itself was refused with `errno 22`. Muffin's own shipped/tested build force-disables its JIT and runs an interpreter instead (a backend AetherEMU does not have, per above) — meaning even the sibling project's fallback path isn't available here.
+
+**This is the actual top-priority open problem for this project**, not a someday-nice-to-have: until `mmap(MAP_JIT)` (or some equivalent executable-memory strategy) is confirmed working on a real sideloaded AetherEMU build, there is no confirmed way for this emulator to run guest code on iOS at all — independent of rendering, input, or any of the app-scaffold work below.
 
 ## Next steps, in priority order
 
-1. **Unblock CI** (external — GitHub Actions billing on this account) and get one clean end-to-end configure+build+app-build run, so the fixes above have an actual green signal instead of "should work per reading the code."
-2. **Wire Metal rendering**: `GraphicsContext_iOS`/`video_core`'s Vulkan-via-MoltenVK path needs to actually target the `CAMetalLayer` `AetherBridge` already receives — likely means implementing the surface-creation code that `emu_window.h`'s TODOs point at.
-3. **Wire the render loop**: `CADisplayLink`-driven frame pacing feeding `EmulationSession::RunEmulation` instead of a bare `m_system.Run()` call.
-4. **Wire touch input**: forward `UITouch` events from `MetalHostView` through to `EmuWindow_iOS::OnTouchPressed/Moved/Released`.
-5. **Complete `InitializeEmulation`/`ConfigureFilesystemProvider`**: applet/HID setup, exit-callback wiring, and a real completion callback from `EmulationSession` back through `AetherBridge` to SwiftUI (so `loadGameAtPath:` can report real success/failure instead of guessing).
-6. **First real device test**: once 2–5 land, the actual first milestone is "a homebrew or retail title boots to a frame on a physical iPad/iPhone via the interpreter path" — everything before this point is groundwork, not a demo.
-7. **Gamepad/MFi controller support** — after touch input works, since touch is the more likely primary input method and simpler to wire.
-8. **Revisit JIT** only after the interpreter path is proven and if performance demands it — this means confirming whether `mmap(MAP_JIT)` actually succeeds under a sideloaded signature in practice, which nothing in this repo currently tests.
+1. **Resolve the JIT question first.** Before rendering/input/anything else: get a real sideloaded build onto a device and confirm whether `mmap(MAP_JIT)` (or the CS_DEBUGGED-only R+X fallback muffin ended up using) actually succeeds. If it doesn't, the options are (a) find a working executable-memory strategy through more trial and error, matching what muffin had to do, or (b) build an actual non-NCE interpreter CPU backend for this codebase — currently absent — as a fallback. Neither is a small task; budget for it accordingly rather than assuming the declared entitlements alone solve this.
+2. **Unblock CI** (external — GitHub Actions billing on this account) and get one clean end-to-end configure+build+app-build run, so the compile-level fixes already made have an actual green signal.
+3. **Wire Metal rendering**: `GraphicsContext_iOS`/`video_core`'s Vulkan-via-MoltenVK path needs to actually target the `CAMetalLayer` `AetherBridge` already receives — likely means implementing the surface-creation code that `emu_window.h`'s TODOs point at.
+4. **Wire the render loop**: `CADisplayLink`-driven frame pacing feeding `EmulationSession::RunEmulation` instead of a bare `m_system.Run()` call.
+5. **Wire touch input**: forward `UITouch` events from `MetalHostView` through to `EmuWindow_iOS::OnTouchPressed/Moved/Released`.
+6. **Complete `InitializeEmulation`/`ConfigureFilesystemProvider`**: applet/HID setup, exit-callback wiring, and a real completion callback from `EmulationSession` back through `AetherBridge` to SwiftUI (so `loadGameAtPath:` can report real success/failure instead of guessing).
+7. **First real device test**: once 1 and 3–6 land, the actual first milestone is "a homebrew or retail title boots to a frame on a physical iPad/iPhone" — everything before this point is groundwork, not a demo.
+8. **Gamepad/MFi controller support** — after touch input works.
 
 ## Files referenced
 

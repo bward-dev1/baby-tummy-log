@@ -5,6 +5,7 @@ import SwiftUI
 
 struct HomeView: View {
     @Binding var games: [Game]
+    @Binding var folders: [GameFolder]
     var onPlay: (Game) -> Void
     var onImportTapped: () -> Void
     var onChangeTheme: () -> Void
@@ -32,7 +33,11 @@ struct HomeView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                LibraryGrid(games: games, selected: $selected)
+                // Rail has no folder-browsing view of its own yet (unlike Dock's
+                // FolderGrid/FolderDetailSheet) -- but folders is the same @State
+                // ContentView shares with Dock, so long-press-to-add here actually
+                // does something real: switch to Dock to browse/manage what you added.
+                LibraryGrid(games: games, selected: $selected, folders: folders, onAddToFolder: addToFolder)
             }
             .padding(20)
 
@@ -56,6 +61,13 @@ struct HomeView: View {
             if selected == nil {
                 selected = games.first
             }
+        }
+    }
+
+    private func addToFolder(_ game: Game, _ folder: GameFolder) {
+        guard let index = folders.firstIndex(where: { $0.id == folder.id }) else { return }
+        if !folders[index].gameIDs.contains(game.id) {
+            folders[index].gameIDs.append(game.id)
         }
     }
 

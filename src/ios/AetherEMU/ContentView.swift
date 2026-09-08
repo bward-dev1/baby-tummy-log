@@ -49,6 +49,7 @@ struct ContentView: View {
                 case .rail:
                     HomeView(
                         games: $games,
+                        folders: $folders,
                         onPlay: loadGame,
                         onImportTapped: { isPickingGame = true },
                         onChangeTheme: { storedTheme = nil }

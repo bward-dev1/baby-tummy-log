@@ -318,10 +318,16 @@ endif()
 # includes <asm-generic/signal.h>/<asm-generic/unistd.h> (Linux UAPI kernel headers,
 # not present on any other OS) and its SIGUSR2/SIGURG/TPIDR_EL0-offset scheme mirrors
 # Linux's own ARM64 ucontext/TLS layout specifically. An earlier pass here added IOS to
-# this condition on the theory that omitting it left iOS defaulting to JIT unconditionally
-# -- backwards: omitting IOS is what correctly leaves the interpreter as the iOS fallback
-# (see HAS_NCE's other iOS-conditioned framework-linking guard above), and enabling this
-# doesn't compile on iOS at all, let alone run. Reverted to Android/Linux only.
+# this condition; it doesn't compile on iOS at all (confirmed by CI), so it had to come
+# back out regardless. But a claim made alongside that revert -- that omitting IOS here
+# "correctly leaves the interpreter as the iOS fallback" -- was itself wrong and should
+# not be trusted: CpuBackend only has two values (settings_enums.h: Dynarmic, Nce; see
+# src/common/settings.h's cpu_backend default, #ifdef HAS_NCE ? Nce : Dynarmic), and
+# Dynarmic is a JIT recompiler (backend/{x64,arm64,...}/ are all JIT code emitters) with
+# no standalone interpreter mode in this codebase. With HAS_NCE off, iOS's only CPU
+# backend is Dynarmic -- i.e. JIT is not optional here, it is the sole way to execute
+# guest code at all, unless/until a real non-NCE interpreter backend is added. Reverted
+# to Android/Linux only regardless, since it doesn't compile on iOS either way.
 if (ARCHITECTURE_arm64 AND (ANDROID OR LINUX))
     set(HAS_NCE 1)
     add_compile_definitions(HAS_NCE=1)

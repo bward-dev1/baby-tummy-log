@@ -7,11 +7,21 @@
 	     SideStore/AltStore via a momentary debugger attach at launch) is necessary but
 	     may not be sufficient on its own for mmap(MAP_JIT) to succeed -- see
 	     cemu-ios-muffin's Cemu.entitlements for the fuller writeup of this same open
-	     question on a sibling project. Whether this does anything depends on how
-	     whatever tool signs/re-signs this app handles entitlement injection, which
-	     this repo doesn't control. HAS_NCE is gated so the interpreter (JIT-less) path
-	     is what actually runs on iOS regardless -- see the top-level CMakeLists.txt.
-	     JIT here is aspirational, not load-bearing. -->
+	     question on a sibling project (their own device test: CS_DEBUGGED set,
+	     mprotect(R+X) succeeded, but mmap(MAP_JIT) still refused with errno 22).
+	     Whether this does anything depends on how whatever tool signs/re-signs this app
+	     handles entitlement injection, which this repo doesn't control.
+
+	     CORRECTION: an earlier version of this comment claimed HAS_NCE being off meant
+	     "the interpreter (JIT-less) path is what actually runs on iOS regardless" --
+	     that was wrong and should not be trusted. CpuBackend only has two values
+	     (settings_enums.h: Dynarmic, Nce) and Dynarmic is a JIT recompiler with no
+	     interpreter mode in this codebase -- see the top-level CMakeLists.txt's HAS_NCE
+	     comment for the detail. With HAS_NCE off, Dynarmic (JIT) is the ONLY CPU backend
+	     iOS has. These entitlements are therefore load-bearing, not aspirational: if
+	     mmap(MAP_JIT) doesn't work under whatever signs this app, no guest code runs at
+	     all on iOS today, full stop. This is the actual top-priority open problem for
+	     this project, not a nice-to-have -- see STATUS.md. -->
 	<key>get-task-allow</key>
 	<true/>
 	<key>com.apple.security.cs.allow-jit</key>
