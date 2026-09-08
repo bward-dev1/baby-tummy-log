@@ -10,6 +10,7 @@ struct ContentView: View {
     @AppStorage("aetheremu.appTheme") private var storedTheme: String?
 
     @State private var games: [Game] = []
+    @State private var folders: [GameFolder] = []
     @State private var isPickingGame = false
     @State private var isRunning = false
     @State private var lastError: String?
@@ -55,6 +56,7 @@ struct ContentView: View {
                 case .dock:
                     DockHomeView(
                         games: $games,
+                        folders: $folders,
                         onPlay: loadGame,
                         onImportTapped: { isPickingGame = true },
                         onChangeTheme: { storedTheme = nil }

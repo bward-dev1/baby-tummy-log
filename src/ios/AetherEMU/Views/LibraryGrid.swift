@@ -6,6 +6,8 @@ import SwiftUI
 struct LibraryGrid: View {
     let games: [Game]
     @Binding var selected: Game?
+    var folders: [GameFolder] = []
+    var onAddToFolder: (Game, GameFolder) -> Void = { _, _ in }
 
     private let columns = [GridItem(.flexible()), GridItem(.flexible())]
 
@@ -43,6 +45,19 @@ struct LibraryGrid: View {
                                 GameTile(game: game, isSelected: selected?.id == game.id, cornerRadius: 12)
                             }
                             .buttonStyle(.plain)
+                            .contextMenu {
+                                if folders.isEmpty {
+                                    Text("No folders yet")
+                                } else {
+                                    ForEach(folders) { folder in
+                                        Button {
+                                            onAddToFolder(game, folder)
+                                        } label: {
+                                            Label(folder.name, systemImage: "folder")
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

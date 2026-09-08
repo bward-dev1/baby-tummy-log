@@ -3,20 +3,33 @@
 
 import SwiftUI
 
+private enum DockBrowseMode: String, CaseIterable {
+    case library = "Library"
+    case folders = "Folders"
+}
+
 /// The "Dock" theme: a full-width horizontal carousel with a floating bottom dock,
-/// in the spirit of the bottom-dock reference concept -- but with its own wording
-/// throughout (no "View All"/"Folders" header text, no A/X button-hint glyphs) rather
-/// than reproducing that concept's on-screen text verbatim, since that one leans much
+/// a Library/Folders toggle, and a "View More" detail sheet -- in the spirit of the
+/// bottom-dock reference concepts, but with its own wording throughout (no "View All"
+/// header text copied verbatim, no A/X button-hint glyphs, no real person's likeness)
+/// rather than reproducing that concept's on-screen text/imagery, since it leans much
 /// closer to a literal recreation of Nintendo's own system menu than the Rail theme
-/// does.
+/// does. Folders here are genuinely user-organized (long-press a game to add it to
+/// one) -- AetherEMU has no metadata service to back curated genre shelves.
 struct DockHomeView: View {
     @Binding var games: [Game]
+    @Binding var folders: [GameFolder]
     var onPlay: (Game) -> Void
     var onImportTapped: () -> Void
     var onChangeTheme: () -> Void
 
     @State private var rail: RailSection = .library
     @State private var selected: Game?
+    @State private var mode: DockBrowseMode = .library
+    @State private var openFolder: GameFolder?
+    @State private var isShowingDetail = false
+    @State private var isCreatingFolder = false
+    @State private var newFolderName = ""
 
     var body: some View {
         ZStack {
@@ -39,16 +52,28 @@ struct DockHomeView: View {
 
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
-                        Text("Your Library")
-                            .font(.headline)
-                            .foregroundStyle(.white)
+                        Picker("", selection: $mode) {
+                            ForEach(DockBrowseMode.allCases, id: \.self) { m in
+                                Text(m.rawValue).tag(m)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 220)
                         Spacer()
-                        Text("\(games.count) games")
+                        Text(mode == .library ? "\(games.count) games" : "\(folders.count) folders")
                             .font(.caption)
                             .foregroundStyle(.white.opacity(0.5))
                     }
 
-                    if games.isEmpty {
+                    if mode == .folders {
+                        FolderGrid(
+                            folders: folders,
+                            library: games,
+                            onCreate: { isCreatingFolder = true },
+                            onOpen: { openFolder = $0 }
+                        )
+                        .frame(minHeight: 260)
+                    } else if games.isEmpty {
                         VStack(spacing: 8) {
                             Image(systemName: "square.and.arrow.down")
                                 .font(.title)
@@ -82,13 +107,26 @@ struct DockHomeView: View {
                                         .frame(width: 160)
                                     }
                                     .buttonStyle(.plain)
+                                    .contextMenu {
+                                        if folders.isEmpty {
+                                            Text("No folders yet")
+                                        } else {
+                                            ForEach(folders) { folder in
+                                                Button {
+                                                    addGame(game, to: folder)
+                                                } label: {
+                                                    Label(folder.name, systemImage: "folder")
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                             .padding(.vertical, 4)
                         }
                     }
 
-                    if let game = selected {
+                    if mode == .library, let game = selected {
                         Divider().overlay(.white.opacity(0.15))
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
@@ -100,6 +138,11 @@ struct DockHomeView: View {
                                     .foregroundStyle(.white.opacity(0.5))
                             }
                             Spacer()
+                            Button("View More") {
+                                isShowingDetail = true
+                            }
+                            .font(.footnote)
+                            .foregroundStyle(.white.opacity(0.7))
                             Button {
                                 onPlay(game)
                             } label: {
@@ -133,5 +176,45 @@ struct DockHomeView: View {
                 selected = games.first
             }
         }
+        .sheet(isPresented: $isShowingDetail) {
+            if let game = selected {
+                GameDetailPanel(game: game, onPlay: { onPlay(game); isShowingDetail = false })
+                    .padding()
+                    .background(Theme.backgroundGradient)
+            }
+        }
+        .sheet(item: $openFolder) { folder in
+            FolderDetailSheet(
+                folder: folder,
+                library: games,
+                onPlay: { game in onPlay(game); openFolder = nil },
+                onRemove: { game in removeGame(game, from: folder) },
+                onDismiss: { openFolder = nil }
+            )
+        }
+        .alert("New Folder", isPresented: $isCreatingFolder) {
+            TextField("Folder name", text: $newFolderName)
+            Button("Cancel", role: .cancel) { newFolderName = "" }
+            Button("Create") {
+                let name = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !name.isEmpty {
+                    folders.append(GameFolder(name: name))
+                }
+                newFolderName = ""
+            }
+        }
+    }
+
+    private func addGame(_ game: Game, to folder: GameFolder) {
+        guard let index = folders.firstIndex(where: { $0.id == folder.id }) else { return }
+        if !folders[index].gameIDs.contains(game.id) {
+            folders[index].gameIDs.append(game.id)
+        }
+    }
+
+    private func removeGame(_ game: Game, from folder: GameFolder) {
+        guard let index = folders.firstIndex(where: { $0.id == folder.id }) else { return }
+        folders[index].gameIDs.removeAll { $0 == game.id }
+        openFolder = folders[index]
     }
 }
