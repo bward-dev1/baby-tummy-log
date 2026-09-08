@@ -420,6 +420,12 @@ set(ENABLE_TESTING OFF)
 
 # boost
 set(BOOST_INCLUDE_LIBRARIES algorithm icl pool container heap asio headers process filesystem crc variant)
+if (IOS)
+    # boost::process's libs/process/src/shell.cpp calls wordexp()/wordfree(),
+    # which Apple marks unavailable on iOS (they can invoke an arbitrary shell,
+    # disallowed by the sandbox). Nothing iOS-side needs process/shell spawning.
+    list(REMOVE_ITEM BOOST_INCLUDE_LIBRARIES process)
+endif()
 
 AddJsonPackage(boost)
 
