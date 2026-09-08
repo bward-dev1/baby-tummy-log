@@ -21,33 +21,36 @@ struct ThemePickerView: View {
                     .font(.subheadline)
                     .foregroundStyle(.white.opacity(0.6))
 
-                HStack(spacing: 24) {
-                    ForEach(AppTheme.allCases) { theme in
-                        Button {
-                            onSelect(theme)
-                        } label: {
-                            VStack(spacing: 14) {
-                                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                    .fill(theme.previewGradient)
-                                    .frame(width: 220, height: 140)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                            .strokeBorder(.white.opacity(0.25), lineWidth: 1)
-                                    )
-                                Text(theme.displayName)
-                                    .font(.headline)
-                                    .foregroundStyle(.white)
-                                Text(theme.summary)
-                                    .font(.caption)
-                                    .foregroundStyle(.white.opacity(0.6))
-                                    .multilineTextAlignment(.center)
-                                    .frame(width: 200)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 24) {
+                        ForEach(AppTheme.allCases) { theme in
+                            Button {
+                                onSelect(theme)
+                            } label: {
+                                VStack(spacing: 14) {
+                                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                        .fill(theme.previewGradient)
+                                        .frame(width: 200, height: 130)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                                .strokeBorder(.white.opacity(0.25), lineWidth: 1)
+                                        )
+                                    Text(theme.displayName)
+                                        .font(.headline)
+                                        .foregroundStyle(.white)
+                                    Text(theme.summary)
+                                        .font(.caption)
+                                        .foregroundStyle(.white.opacity(0.6))
+                                        .multilineTextAlignment(.center)
+                                        .frame(width: 180)
+                                }
+                                .padding(16)
+                                .glassCard()
                             }
-                            .padding(16)
-                            .glassCard()
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
+                    .padding(.horizontal, 8)
                 }
             }
             .padding(32)

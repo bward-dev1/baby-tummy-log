@@ -62,6 +62,22 @@ struct ContentView: View {
                         onImportTapped: { isPickingGame = true },
                         onChangeTheme: { storedTheme = nil }
                     )
+                case .lavaWarm:
+                    LavaLampHomeView(
+                        palette: .warm,
+                        games: $games,
+                        onPlay: loadGame,
+                        onImportTapped: { isPickingGame = true },
+                        onChangeTheme: { storedTheme = nil }
+                    )
+                case .lavaCool:
+                    LavaLampHomeView(
+                        palette: .cool,
+                        games: $games,
+                        onPlay: loadGame,
+                        onImportTapped: { isPickingGame = true },
+                        onChangeTheme: { storedTheme = nil }
+                    )
                 }
             } else {
                 ThemePickerView(onSelect: { storedTheme = $0.rawValue })

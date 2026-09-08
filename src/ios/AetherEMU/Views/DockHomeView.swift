@@ -30,6 +30,7 @@ struct DockHomeView: View {
     @State private var isShowingDetail = false
     @State private var isCreatingFolder = false
     @State private var newFolderName = ""
+    @State private var isShowingSettings = false
 
     var body: some View {
         ZStack {
@@ -166,6 +167,11 @@ struct DockHomeView: View {
             }
             .padding(20)
         }
+        .onChange(of: rail) { newValue in
+            if newValue == .settings {
+                isShowingSettings = true
+            }
+        }
         .onChange(of: games) { newValue in
             if selected == nil {
                 selected = newValue.first
@@ -175,6 +181,9 @@ struct DockHomeView: View {
             if selected == nil {
                 selected = games.first
             }
+        }
+        .sheet(isPresented: $isShowingSettings) {
+            SettingsView(onDismiss: { isShowingSettings = false })
         }
         .sheet(isPresented: $isShowingDetail) {
             if let game = selected {

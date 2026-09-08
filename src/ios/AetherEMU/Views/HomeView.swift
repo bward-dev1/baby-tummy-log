@@ -12,6 +12,7 @@ struct HomeView: View {
 
     @State private var rail: RailSection = .library
     @State private var selected: Game?
+    @State private var isShowingSettings = false
 
     var body: some View {
         ZStack {
@@ -52,6 +53,11 @@ struct HomeView: View {
                 Spacer()
             }
         }
+        .onChange(of: rail) { newValue in
+            if newValue == .settings {
+                isShowingSettings = true
+            }
+        }
         .onChange(of: games) { newValue in
             if selected == nil {
                 selected = newValue.first
@@ -61,6 +67,9 @@ struct HomeView: View {
             if selected == nil {
                 selected = games.first
             }
+        }
+        .sheet(isPresented: $isShowingSettings) {
+            SettingsView(onDismiss: { isShowingSettings = false })
         }
     }
 
