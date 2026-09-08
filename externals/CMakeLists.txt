@@ -386,8 +386,17 @@ if (YUZU_CRASH_DUMPS AND NOT TARGET libbreakpad_client)
     endif()
 endif()
 
-if (APPLE)
-    # moltenvk
+if (IOS)
+    # moltenvk (iOS)
+    # The upstream Ryujinx.MoltenVK release only ships a flat libMoltenVK.dylib
+    # for macOS. For iOS it only ships MoltenVK.xcframework (ios-arm64), with
+    # no dynamic-library variant usable outside an app bundle, so we link the
+    # static archive from that xcframework instead of a dylib.
+    AddJsonPackage(moltenvk-ios)
+
+    set(MOLTENVK_LIBRARY "${moltenvk-ios_SOURCE_DIR}/MoltenVK/static/MoltenVK.xcframework/ios-arm64/libMoltenVK.a" CACHE STRING "" FORCE)
+elseif (APPLE)
+    # moltenvk (macOS)
     if (NOT YUZU_USE_BUNDLED_MOLTENVK)
         find_library(MOLTENVK_LIBRARY MoltenVK)
     endif()
