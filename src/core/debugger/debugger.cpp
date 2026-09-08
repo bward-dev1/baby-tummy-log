@@ -395,6 +395,15 @@ private:
                 return write_end->write_some(buffers);
             }
 
+            // boost::asio::write()'s synchronous completion loop (write.hpp) calls the
+            // error_code-out-param overload, not just the throwing one above -- missed
+            // on the first pass, caught by CI: "no matching member function for call to
+            // 'write_some'" at the two-argument call site in write.hpp.
+            template <typename ConstBufferSequence>
+            size_t write_some(const ConstBufferSequence& buffers, boost::system::error_code& ec) {
+                return write_end->write_some(buffers, ec);
+            }
+
             void close() {
                 boost::system::error_code ec;
                 if (read_end) {
