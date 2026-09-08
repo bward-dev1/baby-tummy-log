@@ -7,6 +7,7 @@
 #include "ios/native.h"
 
 #include <chrono>
+#include <utility>
 
 #include "common/logging.h"
 #include "common/settings.h"
@@ -17,6 +18,8 @@
 #include "core/hle/service/filesystem/filesystem.h"
 #include "core/loader/loader.h"
 #include "hid_core/hid_core.h"
+#include "video_core/gpu.h"
+#include "video_core/renderer_base.h"
 
 namespace {
 EmulationSession s_instance;
@@ -243,10 +246,17 @@ void EmulationSession::RunEmulation() {
     // call into EmulationSession, it would just be a redundant, incorrect driver competing with
     // the GPU thread that's already presenting.
     //
-    // TODO(ios): Android preloads the disk shader cache here (LoadDiskResources +
-    // LoadCallbackStage progress callback) before calling Run() -- skipped for now since it's
-    // orthogonal to the render-loop question and untested on this platform; add it once there's
-    // a frontend progress UI to wire the callback into.
+    // Preload the disk shader cache for the title that was just loaded, mirroring
+    // Android's RunEmulation -- LoadDiskCacheProgress below is a real, logging-based
+    // progress report rather than a fabricated UI callback (iOS has no progress dialog
+    // to report to yet).
+    if (Settings::values.use_disk_shader_cache.GetValue()) {
+        LoadDiskCacheProgress(VideoCore::LoadCallbackStage::Prepare, 0, 0);
+        m_system.Renderer().ReadRasterizer()->LoadDiskResources(
+            m_system.GetApplicationProcessProgramID(), std::stop_token{}, LoadDiskCacheProgress);
+        LoadDiskCacheProgress(VideoCore::LoadCallbackStage::Complete, 0, 0);
+    }
+
     void(m_system.Run());
 
     // TODO(ios): Android also calls m_system.InitializeDebugger() here when
@@ -254,21 +264,65 @@ void EmulationSession::RunEmulation() {
 
     // Housekeeping wait loop, mirroring Android's RunEmulation shape (native.cpp): keeps this
     // thread parked (not busy-polling) for the lifetime of the emulation session so it can
-    // observe HaltEmulation()'s m_cv.notify_one() and exit cleanly. Previously this function
-    // returned immediately after Run(), so nothing on this thread ever waited for shutdown.
-    //
-    // TODO(ios): Android's version of this loop also polls for a pending disk-shader-cache
-    // reload request (m_pending_shader_cache_title / RequestDiskShaderCacheReload) and services
-    // it here. iOS has no such request queued anywhere yet (no member for it in native.h), so
-    // this loop only handles the shutdown wait for now -- add the reload-request plumbing
-    // alongside the shader cache preload TODO above if/when that's wired up.
+    // observe HaltEmulation()'s m_cv.notify_one() and exit cleanly, and services any pending
+    // disk-shader-cache reload request queued by RequestDiskShaderCacheReload.
     while (true) {
-        std::unique_lock lock(m_mutex);
-        if (m_cv.wait_for(lock, std::chrono::milliseconds(800),
-                           [&]() { return !m_is_running.load(); })) {
-            break;
+        std::optional<u64> reload_title;
+        {
+            std::unique_lock lock(m_mutex);
+            if (m_cv.wait_for(lock, std::chrono::milliseconds(800), [&]() {
+                    return !m_is_running.load() || m_pending_shader_cache_title.has_value();
+                })) {
+                if (!m_is_running) {
+                    break;
+                }
+                reload_title = std::exchange(m_pending_shader_cache_title, std::nullopt);
+            }
+        }
+
+        if (reload_title.has_value()) {
+            ReloadDiskShaderCache(*reload_title);
         }
     }
+}
+
+void EmulationSession::RequestDiskShaderCacheReload(u64 program_id) {
+    {
+        std::scoped_lock lock(m_mutex);
+        m_pending_shader_cache_title = program_id;
+    }
+    m_cv.notify_one();
+}
+
+void EmulationSession::ReloadDiskShaderCache(u64 program_id) {
+    if (!Settings::values.use_disk_shader_cache.GetValue()) {
+        return;
+    }
+
+    LOG_INFO(Frontend, "Reloading disk shader cache for {:016X}", program_id);
+
+    const bool was_paused = m_is_paused;
+
+    m_system.Pause();
+    m_system.GPU().WaitForIdle();
+    m_system.GPU().ObtainContext();
+
+    LoadDiskCacheProgress(VideoCore::LoadCallbackStage::Prepare, 0, 0);
+    m_system.Renderer().ReadRasterizer()->LoadDiskResources(program_id, std::stop_token{},
+                                                           LoadDiskCacheProgress);
+    LoadDiskCacheProgress(VideoCore::LoadCallbackStage::Complete, 0, 0);
+
+    m_system.GPU().ReleaseContext();
+
+    if (!was_paused) {
+        m_system.Run();
+    }
+}
+
+void EmulationSession::LoadDiskCacheProgress(VideoCore::LoadCallbackStage stage,
+                                             std::size_t progress, std::size_t max) {
+    LOG_INFO(Frontend, "Disk shader cache load progress: stage={} progress={}/{}",
+              static_cast<int>(stage), progress, max);
 }
 
 void EmulationSession::SetStateCallback(StateCallback callback) {

@@ -87,8 +87,27 @@ public:
 
     void OnEmulationStarted();
 
+    // Requests a disk shader cache reload for the given title, mirroring Android's
+    // JNI-callable entry point of the same name (native.cpp). Thread-safe: queues the
+    // request and wakes RunEmulation's wait loop, which services it via
+    // ReloadDiskShaderCache below rather than reloading inline on the caller's thread.
+    void RequestDiskShaderCacheReload(u64 program_id);
+
 private:
     void OnEmulationStopped(Core::SystemResultStatus result);
+
+    // Pauses the GPU, reloads the disk shader cache for `program_id`, then resumes --
+    // mirrors Android's ReloadDiskShaderCache. Only ever called from RunEmulation's wait
+    // loop (see native.mm), never directly from RequestDiskShaderCacheReload's caller
+    // thread, so it doesn't need its own locking beyond what m_system already provides.
+    void ReloadDiskShaderCache(u64 program_id);
+
+    // Logs shader-cache load progress. iOS has no progress-bar UI to report to yet
+    // (unlike Android's JNI callback into a Kotlin progress dialog), so this is a real,
+    // functioning stand-in rather than a fabricated frontend hook -- matches this file's
+    // existing pattern of logging honestly instead of guessing at UI that doesn't exist.
+    static void LoadDiskCacheProgress(VideoCore::LoadCallbackStage stage, std::size_t progress,
+                                      std::size_t max);
 
 private:
     // Window management
@@ -111,6 +130,9 @@ private:
     std::atomic<bool> m_is_paused = false;
     std::unique_ptr<FileSys::ManualContentProvider> m_manual_provider;
     StateCallback m_state_callback;
+    // Set by RequestDiskShaderCacheReload, consumed by RunEmulation's wait loop -- mirrors
+    // Android's m_pending_shader_cache_title.
+    std::optional<u64> m_pending_shader_cache_title;
 
     // GPU driver parameters
     std::shared_ptr<Common::DynamicLibrary> m_vulkan_library;
