@@ -35,14 +35,22 @@ enum RailSection: String, CaseIterable, Identifiable {
 struct SideRail: View {
     @Binding var selection: RailSection
     var onImportTapped: () -> Void
+    var onLibraryTapped: () -> Void = {}
 
     var body: some View {
         VStack(spacing: 14) {
             ForEach(RailSection.allCases) { section in
                 Button {
-                    if section == .importGame {
+                    switch section {
+                    case .importGame:
                         onImportTapped()
-                    } else {
+                    case .library:
+                        // Always fires, even when .library is already the current
+                        // selection (it's the default -- .onChange-based routing
+                        // elsewhere wouldn't see a change on the very first tap).
+                        selection = section
+                        onLibraryTapped()
+                    default:
                         selection = section
                     }
                 } label: {

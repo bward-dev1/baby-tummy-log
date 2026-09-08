@@ -35,6 +35,13 @@ public:
     Core::System& System();
     InputCommon::InputSubsystem& GetInputSubsystem();
 
+    // NOTE(ios): neither accessor takes m_mutex -- an adversarial review pass flagged
+    // that callers doing `if (!IsRunning()) return; ... Window()...` as two separate
+    // unlocked steps (AetherBridge.mm's touch forwarding does exactly this) can race
+    // ShutdownEmulation()'s locked m_window.reset(). Currently unreachable: nothing
+    // calls ShutdownEmulation anywhere in this tree yet. The moment a real teardown path
+    // exists, either these accessors or their call sites need to take m_mutex too (see
+    // SurfaceChanged() below for the pattern already fixed this way).
     const EmuWindow_iOS& Window() const;
     EmuWindow_iOS& Window();
 
@@ -84,6 +91,12 @@ private:
     Core::PerfStatsResults m_perf_stats{};
     std::shared_ptr<FileSys::VfsFilesystem> m_vfs;
     Core::SystemResultStatus m_load_result{Core::SystemResultStatus::ErrorNotInitialized};
+    // Guards the one-time Core::System::Initialize() call in InitializeSystem() below --
+    // mirrors Android's `if (!reload) System().Initialize();` in its JNI initializeSystem
+    // wrapper (there is no iOS reload/relaunch flow yet, so this is just "has this
+    // process-wide singleton done its one-time Core bring-up" rather than a real
+    // reload-vs-first-launch distinction).
+    bool m_system_initialized{false};
     std::atomic<bool> m_is_running = false;
     std::atomic<bool> m_is_paused = false;
     std::unique_ptr<FileSys::ManualContentProvider> m_manual_provider;

@@ -12,6 +12,7 @@ struct VerticalLavaLampHomeView: View {
     var onPlay: (Game) -> Void
     var onImportTapped: () -> Void
     var onChangeTheme: () -> Void
+    var onShowLibrary: () -> Void
 
     @State private var rail: RailSection = .library
     @State private var selected: Game?
@@ -94,7 +95,7 @@ struct VerticalLavaLampHomeView: View {
 
             VStack {
                 Spacer()
-                DockBar(selection: $rail, onImportTapped: onImportTapped)
+                DockBar(selection: $rail, onImportTapped: onImportTapped, onLibraryTapped: onShowLibrary)
                     .padding(.bottom, 20)
             }
         }

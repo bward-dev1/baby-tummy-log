@@ -14,6 +14,11 @@ struct ContentView: View {
     @State private var isPickingGame = false
     @State private var isRunning = false
     @State private var lastError: String?
+    // Shown once per cold launch (not persisted -- reappears every fresh launch, like the
+    // reference lock screen), and the shared full-library sheet every theme's .library
+    // icon opens (see onShowLibrary below).
+    @State private var hasUnlocked = false
+    @State private var isShowingLibrary = false
 
     // NX game images. AetherBridge doesn't validate extensions today (see
     // AetherBridge.mm's TODO on InitializeEmulation) -- this list only limits what the
@@ -52,7 +57,8 @@ struct ContentView: View {
                         folders: $folders,
                         onPlay: loadGame,
                         onImportTapped: { isPickingGame = true },
-                        onChangeTheme: { storedTheme = nil }
+                        onChangeTheme: { storedTheme = nil },
+                        onShowLibrary: { isShowingLibrary = true }
                     )
                 case .dock:
                     DockHomeView(
@@ -60,7 +66,8 @@ struct ContentView: View {
                         folders: $folders,
                         onPlay: loadGame,
                         onImportTapped: { isPickingGame = true },
-                        onChangeTheme: { storedTheme = nil }
+                        onChangeTheme: { storedTheme = nil },
+                        onShowLibrary: { isShowingLibrary = true }
                     )
                 case .lavaWarm:
                     LavaLampHomeView(
@@ -68,7 +75,8 @@ struct ContentView: View {
                         games: $games,
                         onPlay: loadGame,
                         onImportTapped: { isPickingGame = true },
-                        onChangeTheme: { storedTheme = nil }
+                        onChangeTheme: { storedTheme = nil },
+                        onShowLibrary: { isShowingLibrary = true }
                     )
                 case .lavaCool:
                     LavaLampHomeView(
@@ -76,7 +84,8 @@ struct ContentView: View {
                         games: $games,
                         onPlay: loadGame,
                         onImportTapped: { isPickingGame = true },
-                        onChangeTheme: { storedTheme = nil }
+                        onChangeTheme: { storedTheme = nil },
+                        onShowLibrary: { isShowingLibrary = true }
                     )
                 case .lavaVerticalRed:
                     VerticalLavaLampHomeView(
@@ -84,7 +93,8 @@ struct ContentView: View {
                         games: $games,
                         onPlay: loadGame,
                         onImportTapped: { isPickingGame = true },
-                        onChangeTheme: { storedTheme = nil }
+                        onChangeTheme: { storedTheme = nil },
+                        onShowLibrary: { isShowingLibrary = true }
                     )
                 case .lavaVerticalBlue:
                     VerticalLavaLampHomeView(
@@ -92,7 +102,8 @@ struct ContentView: View {
                         games: $games,
                         onPlay: loadGame,
                         onImportTapped: { isPickingGame = true },
-                        onChangeTheme: { storedTheme = nil }
+                        onChangeTheme: { storedTheme = nil },
+                        onShowLibrary: { isShowingLibrary = true }
                     )
                 case .lavaDark:
                     LavaLampHomeView(
@@ -100,7 +111,8 @@ struct ContentView: View {
                         games: $games,
                         onPlay: loadGame,
                         onImportTapped: { isPickingGame = true },
-                        onChangeTheme: { storedTheme = nil }
+                        onChangeTheme: { storedTheme = nil },
+                        onShowLibrary: { isShowingLibrary = true }
                     )
                 case .lavaVerticalDark:
                     VerticalLavaLampHomeView(
@@ -108,7 +120,8 @@ struct ContentView: View {
                         games: $games,
                         onPlay: loadGame,
                         onImportTapped: { isPickingGame = true },
-                        onChangeTheme: { storedTheme = nil }
+                        onChangeTheme: { storedTheme = nil },
+                        onShowLibrary: { isShowingLibrary = true }
                     )
                 }
             } else {
@@ -126,6 +139,10 @@ struct ContentView: View {
                         .padding(.bottom, 24)
                 }
             }
+
+            if !hasUnlocked {
+                LaunchLockView(onContinue: { hasUnlocked = true })
+            }
         }
         .fileImporter(isPresented: $isPickingGame, allowedContentTypes: Self.gameContentTypes) { result in
             switch result {
@@ -134,6 +151,16 @@ struct ContentView: View {
             case .failure(let error):
                 lastError = error.localizedDescription
             }
+        }
+        .sheet(isPresented: $isShowingLibrary) {
+            LibraryPageView(
+                games: games,
+                onSelect: { game in
+                    isShowingLibrary = false
+                    loadGame(game)
+                },
+                onDismiss: { isShowingLibrary = false }
+            )
         }
     }
 

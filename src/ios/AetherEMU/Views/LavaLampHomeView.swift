@@ -14,6 +14,7 @@ struct LavaLampHomeView: View {
     var onPlay: (Game) -> Void
     var onImportTapped: () -> Void
     var onChangeTheme: () -> Void
+    var onShowLibrary: () -> Void
 
     @State private var rail: RailSection = .library
     @State private var selected: Game?
@@ -92,7 +93,7 @@ struct LavaLampHomeView: View {
                 Spacer()
 
                 HStack {
-                    DockBar(selection: $rail, onImportTapped: onImportTapped)
+                    DockBar(selection: $rail, onImportTapped: onImportTapped, onLibraryTapped: onShowLibrary)
                     if let game = selected {
                         Button {
                             onPlay(game)

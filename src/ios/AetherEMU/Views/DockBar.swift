@@ -8,14 +8,19 @@ import SwiftUI
 struct DockBar: View {
     @Binding var selection: RailSection
     var onImportTapped: () -> Void
+    var onLibraryTapped: () -> Void = {}
 
     var body: some View {
         HStack(spacing: 18) {
             ForEach(RailSection.allCases) { section in
                 Button {
-                    if section == .importGame {
+                    switch section {
+                    case .importGame:
                         onImportTapped()
-                    } else {
+                    case .library:
+                        selection = section
+                        onLibraryTapped()
+                    default:
                         selection = section
                     }
                 } label: {

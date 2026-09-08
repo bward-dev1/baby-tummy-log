@@ -60,6 +60,16 @@
     os_unfair_lock_lock(&_surfaceLock);
     _surface.layer = nil;
     os_unfair_lock_unlock(&_surfaceLock);
+
+    // An adversarial review pass caught this being missing: clearing _surface.layer
+    // above only fixes AetherBridge's own copy. EmuWindow_iOS::window_info.render_surface
+    // (emu_window.mm's OnSurfaceChanged) still held a (__bridge void*) pointer to the
+    // same CAMetalLayer -- once its sole strong (ARC) owner is gone, that's a dangling
+    // pointer sitting in window_info until something overwrites it. SurfaceChanged()
+    // re-reads m_native_surface (the same _surface struct, still a valid address --
+    // only its .layer field changed to nil), and OnSurfaceChanged's existing
+    // null-surface branch correctly resets render_surface to nullptr/type to Headless.
+    EmulationSession::GetInstance().SurfaceChanged();
 }
 
 - (AetherLoadResult)loadGameAtPath:(NSString *)path {

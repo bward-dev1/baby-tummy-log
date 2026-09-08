@@ -9,6 +9,7 @@ struct HomeView: View {
     var onPlay: (Game) -> Void
     var onImportTapped: () -> Void
     var onChangeTheme: () -> Void
+    var onShowLibrary: () -> Void
 
     @State private var rail: RailSection = .library
     @State private var selected: Game?
@@ -23,7 +24,7 @@ struct HomeView: View {
                 .animation(.easeInOut(duration: 0.4), value: selected)
 
             HStack(alignment: .top, spacing: 16) {
-                SideRail(selection: $rail, onImportTapped: onImportTapped)
+                SideRail(selection: $rail, onImportTapped: onImportTapped, onLibraryTapped: onShowLibrary)
 
                 VStack(spacing: 16) {
                     if let game = selected {
@@ -54,8 +55,10 @@ struct HomeView: View {
             }
         }
         .onChange(of: rail) { newValue in
-            if newValue == .settings {
-                isShowingSettings = true
+            switch newValue {
+            case .settings: isShowingSettings = true
+            case .library: onShowLibrary()
+            default: break
             }
         }
         .onChange(of: games) { newValue in
