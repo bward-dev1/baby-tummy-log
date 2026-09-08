@@ -1,0 +1,17 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 0000000..0000000 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -276,7 +276,11 @@ if(USE_AAUDIO)
+ endif()
+
+ check_include_files(AudioUnit/AudioUnit.h USE_AUDIOUNIT)
+-if(USE_AUDIOUNIT)
++# AudioUnit/AudioUnit.h exists in the iOS SDK too, but cubeb_osx_run_loop.cpp
++# pulls in CoreAudio/AudioHardware.h (the macOS-only HAL device-enumeration
++# API) and links CoreServices, neither of which ship on iOS. Upstream's
++# CMakeLists.txt doesn't distinguish iOS from macOS here, so gate it off.
++if(USE_AUDIOUNIT AND NOT IOS)
+   target_sources(cubeb PRIVATE
+     src/cubeb_audiounit.cpp
+     src/cubeb_osx_run_loop.cpp)

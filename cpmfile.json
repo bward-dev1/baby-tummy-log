@@ -55,6 +55,9 @@
             "BUILD_TOOLS OFF",
             "BUNDLE_SPEEX ON"
         ],
+        "patches": [
+            "0001-disable-audiounit-on-ios.patch"
+        ],
         "repo": "mozilla/cubeb",
         "version": "fa02160712"
     },
