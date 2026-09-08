@@ -2,7 +2,7 @@
 
 An iOS port of the [Eden Switch emulator](https://git.eden-emu.dev/eden-emu/eden) (itself a yuzu fork). This document is the honest ceiling, not a pitch — it says what's actually implemented, what's a stub, and what nothing has confirmed yet. When in doubt, read the code's own comments; they're more current than this file will ever be.
 
-Last updated: 2026-09-08, against `git log` HEAD `f139f49` — CI run `34253594263` is the latest fully green build, including keys/firmware import, a persistent game library, a real log viewer, and a fix for a boot-blocking `applet_id` bug (see "Boot-path bug fix" below).
+Last updated: 2026-09-08, against `git log` HEAD `484c2f8` — CI run `34266357753` is the latest fully green build. Since the applet_id boot fix: a real keys-import bug fix (parent-directory sandbox scan, iOS only grants access to the exact picked file), the managed Games folder moved from Application Support to Documents (Files.app/LiveContainer never exposed Application Support, which is why it looked empty), and a real-buttons/animations/native-SwiftUI UI pass including a new "Classic Eden" desktop-style theme.
 
 ## The one-line truth
 
@@ -84,6 +84,16 @@ Service::AM::FrontendAppletParameters params{
 Also added `m_system.RegisterApplicationChangedCallback(...)` alongside the existing `RegisterExitCallback` registration, wiring disk-shader-cache reload to program changes the same way Android does.
 
 This is the most significant "make it actually boot" fix possible without device access — a real, verified compile-time/logic bug that would have blocked every title regardless of the JIT question. Shipped in CI run `34253594263`, uploaded to the `v0.0.1-unsigned-prealpha` GitHub release.
+
+## Real bugs found from field testing (2026-09-08, reported by the actual developer)
+
+- **Keys import always failed.** `FirmwareManager::InstallKeys`'s non-Android path calls `Common::FS::IsDir()` on the *parent directory* of the picked prod.keys file, to look for sibling title.keys/key_retail.bin. iOS's single-file `UIDocumentPickerViewController` grant only ever covers the exact file picked, never its parent -- `stat`/`opendir` on the parent is denied (EPERM), which `std::filesystem::is_directory`'s `error_code` overload silently turns into `false`, so the scan always returned `InvalidDir` before ever reaching the prod.keys check. `EmulationSession::InstallKeys` (native.mm) no longer goes through that path at all on iOS -- it copies only the one granted file.
+- **The managed Games folder looked empty in Files.app/LiveContainer/SideStore.** It really was empty from their point of view: games were saved to Application Support, which `UIFileSharingEnabled`/`LSSupportsOpeningDocumentsInPlace` (already set in Info-Extra.plist) never exposes -- only Documents is exposed. `GameLibrary`'s `gamesDirectory` now points at `Documents/Games`; the library manifest itself stays in Application Support (internal bookkeeping, not meant to be hand-edited via Files).
+- **Firmware import failure reported too, root cause not yet found.** Read through the whole `InstallFirmware` path (NAND content directory setup, NCA collection, VFS copy) and nothing stood out as definitively broken the way the two bugs above did. Settings > Logs now exists specifically so the next failure's exact `InstallFirmware: ...` LOG_ERROR line can be captured and used to diagnose for real instead of guessing further.
+
+## UI overhaul (2026-09-08)
+
+Four requirements from the actual developer, all real, not stubs: real animations throughout (selection highlights, tab/mode-switch cross-fades, button press feedback via `PressScaleButtonStyle`), confirmed-native SwiftUI everywhere (zero image assets in the repo besides the app icon), every previously-dead rail/dock icon (`.profile`/`.captures`/`.controller` -- an old honest-stub convention) now leads to a real working screen (`ProfileView` real library stats, `RecentlyPlayedView` real `Game.lastPlayed`-backed list, `ControllersView` live `GCController.controllers()` state), and every page carries real usable content (a new Settings "Preferences" section, a working "Remove from Library" action that previously didn't exist anywhere in the UI). Also added a fifth theme, "Classic Eden" (`EdenClassicHomeView`) -- a dense sortable list + toolbar + status bar layout evoking desktop Eden's own shape, native SwiftUI, wired through the same real `GameLibrary`/`AetherBridge` backing every other theme uses.
 
 ## Next steps, in priority order
 
