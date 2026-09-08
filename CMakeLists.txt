@@ -145,6 +145,19 @@ if (YUZU_STATIC_BUILD)
     endif()
 endif()
 
+# iOS has no system package manager / Homebrew-equivalent for the SDK sysroot, so
+# these must always be bundled here regardless of YUZU_STATIC_BUILD (which above
+# is only forced on by the bundled-Qt path, and iOS never builds the Qt frontend).
+if (IOS)
+    set(YUZU_USE_BUNDLED_FFMPEG ON)
+    set(YUZU_USE_BUNDLED_SDL3 ON)
+    set(YUZU_USE_BUNDLED_OPENSSL ON)
+
+    set(fmt_FORCE_BUNDLED ON)
+    set(SPIRV-Headers_FORCE_BUNDLED ON)
+    set(zstd_FORCE_BUNDLED ON)
+endif()
+
 if (MSVC AND ARCHITECTURE_x86)
     message(FATAL_ERROR "Attempting to build with the x86 environment is not supported. \
         This can typically happen if you used the Developer Command Prompt from the start menu; \
