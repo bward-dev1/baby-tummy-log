@@ -173,7 +173,7 @@ struct SettingsView: View {
             }
             .buttonStyle(.borderedProminent)
 
-            Text("Pick your own prod.keys file. If title.keys or key_retail.bin sit in the same folder, they're picked up automatically.")
+            Text("Pick your own prod.keys file directly -- iOS only grants access to the exact file you pick, so title.keys/key_retail.bin aren't auto-detected even if they're in the same folder.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
@@ -226,7 +226,7 @@ struct SettingsView: View {
 
     private var storageSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Imported games are copied into AetherEMU's own Application Support/Games folder and stay there across relaunches -- you won't be asked to re-pick a file just to open it again.")
+            Text("Imported games are copied into a Games folder inside AetherEMU's Documents folder (visible via Files.app/LiveContainer's file browser) and stay there across relaunches -- you won't be asked to re-pick a file just to open it again.")
                 .foregroundStyle(.secondary)
             Text("This does mean each imported game takes roughly double its own size in storage until removed from the Library (the original file, wherever you picked it from, is untouched).")
                 .font(.footnote)

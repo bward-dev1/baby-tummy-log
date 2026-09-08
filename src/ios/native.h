@@ -49,10 +49,12 @@ public:
     // now calls this at app launch via AetherBridge.
     void InitializeApplication(const std::string& app_support_dir);
 
-    // Copies prod.keys (and title.keys/key_retail.bin, if present alongside it) from
-    // `prod_keys_path` into EdenPath::KeysDir and reloads Core::Crypto::KeyManager.
-    // Mirrors FirmwareManager::InstallKeys's non-Android path directly (already
-    // platform-agnostic std::filesystem code, no Qt/JNI involved).
+    // Copies prod.keys from `prod_keys_path` into EdenPath::KeysDir and reloads
+    // Core::Crypto::KeyManager. Deliberately does NOT scan for sibling title.keys/
+    // key_retail.bin the way FirmwareManager::InstallKeys's desktop/Android path does --
+    // iOS's single-file document-picker grant only covers the picked file itself, not its
+    // parent directory, so that scan always failed with InvalidDir on a real device. See
+    // native.mm's InstallKeys for the full explanation.
     bool InstallKeys(const std::string& prod_keys_path);
 
     // Copies every .nca file directly inside `firmware_dir_path` (non-recursive -- the

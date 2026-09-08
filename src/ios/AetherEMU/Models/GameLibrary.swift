@@ -3,16 +3,24 @@
 
 import Foundation
 
-/// Owns the app's actual managed game folder (Application Support/Games) and persists
-/// the library across launches -- previously `games`/`folders` were plain `@State` in
-/// ContentView, reset to empty on every relaunch, and every load re-required picking the
-/// file fresh via a security-scoped bookmark that was never actually saved anywhere.
+/// Owns the app's actual managed game folder and persists the library across launches --
+/// previously `games`/`folders` were plain `@State` in ContentView, reset to empty on
+/// every relaunch, and every load re-required picking the file fresh via a
+/// security-scoped bookmark that was never actually saved anywhere.
 ///
 /// Importing a game now COPIES it into this app-owned folder. That's a deliberate
 /// tradeoff (doubles disk usage vs. referencing the original file in place) in exchange
 /// for something that actually works reliably: once copied, the file lives inside our
 /// own sandbox, so no security-scoped access is needed ever again, and the library
 /// survives relaunch without re-picking anything.
+///
+/// The Games folder specifically lives under Documents, not Application Support --
+/// Info-Extra.plist sets UIFileSharingEnabled + LSSupportsOpeningDocumentsInPlace, which
+/// only ever exposes Documents to Files.app/Finder/LiveContainer's file browser. An
+/// earlier version put Games in Application Support, which is why the "app folder" a
+/// user finds via Files app/LiveContainer looked empty -- games were real, just not in
+/// the one directory iOS actually shows there. The manifest itself stays in Application
+/// Support (internal bookkeeping, not meant to be hand-edited/deleted via Files).
 @MainActor
 final class GameLibrary: ObservableObject {
     // didSet-based autosave rather than each mutator remembering to call save() --
@@ -35,8 +43,9 @@ final class GameLibrary: ObservableObject {
     }
 
     init() {
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        gamesDirectory = support.appendingPathComponent("Games", isDirectory: true)
+        gamesDirectory = documents.appendingPathComponent("Games", isDirectory: true)
         manifestURL = support.appendingPathComponent("library.json")
         try? FileManager.default.createDirectory(at: gamesDirectory, withIntermediateDirectories: true)
         load()

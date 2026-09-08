@@ -41,9 +41,11 @@
 #include "core/file_sys/content_archive.h"
 #include "core/file_sys/vfs/vfs.h"
 #include "core/file_sys/vfs/vfs_real.h"
+#include "core/crypto/key_manager.h"
 #include "core/hle/service/am/applet_manager.h"
 #include "core/hle/service/filesystem/filesystem.h"
 #include "core/loader/loader.h"
+#include "frontend_common/content_manager.h"
 #include "frontend_common/firmware_manager.h"
 #include "hid_core/hid_core.h"
 #include "video_core/gpu.h"
@@ -211,15 +213,44 @@ void EmulationSession::ConfigureFilesystemProvider(const std::string& filepath) 
 }
 
 bool EmulationSession::InstallKeys(const std::string& prod_keys_path) {
-    // FirmwareManager::InstallKeys's non-Android branch is already platform-agnostic
-    // std::filesystem code (checks the filename ends with "prod.keys", looks alongside it
-    // for title.keys/key_retail.bin, copies whichever exist into EdenPath::KeysDir, then
-    // reloads Core::Crypto::KeyManager) -- no Qt/JNI involved, safe to call directly.
-    const auto result = FirmwareManager::InstallKeys(prod_keys_path, "prod.keys");
-    if (result != FirmwareManager::Success) {
-        LOG_ERROR(Frontend, "InstallKeys failed: {}", static_cast<int>(result));
+    // Deliberately NOT calling FirmwareManager::InstallKeys here (its non-Android branch
+    // was tried first and is real, working code on desktop/Android) -- it starts by
+    // calling Common::FS::IsDir() on prod_keys_path's *parent* directory to look for
+    // sibling title.keys/key_retail.bin files. On iOS, a UIDocumentPicker single-file
+    // grant (.item, see SettingsView's fileImporter) only extends the sandbox to the one
+    // picked file itself -- the OS denies stat()/opendir() on its parent directory with
+    // EPERM, which std::filesystem::is_directory swallows into a plain `false` via its
+    // error_code overload. So IsDir(parent) always returns false on a real device, and
+    // FirmwareManager::InstallKeys always failed with InvalidDir before ever reaching the
+    // prod.keys existence check -- a real, reported bug (import silently never worked),
+    // not a hypothetical one. Sidestepping the parent-directory scan entirely: copy only
+    // the single granted file, which is all iOS can reliably give us access to anyway.
+    const auto keys_dir = Common::FS::GetEdenPath(Common::FS::EdenPath::KeysDir);
+    if (!Common::FS::CreateDirs(keys_dir)) {
+        LOG_ERROR(Frontend, "InstallKeys: failed to create {}", keys_dir.string());
         return false;
     }
+
+    const std::filesystem::path source_path = prod_keys_path;
+    if (source_path.filename() != "prod.keys") {
+        LOG_ERROR(Frontend, "InstallKeys: {} is not named prod.keys", prod_keys_path);
+        return false;
+    }
+
+    std::error_code ec;
+    std::filesystem::copy_file(source_path, keys_dir / "prod.keys",
+                                std::filesystem::copy_options::overwrite_existing, ec);
+    if (ec) {
+        LOG_ERROR(Frontend, "InstallKeys: failed to copy {}: {}", prod_keys_path, ec.message());
+        return false;
+    }
+
+    Core::Crypto::KeyManager::Instance().ReloadKeys();
+    if (!ContentManager::AreKeysPresent()) {
+        LOG_ERROR(Frontend, "InstallKeys: copied prod.keys but keys still aren't recognized");
+        return false;
+    }
+
     LOG_INFO(Frontend, "InstallKeys succeeded from {}", prod_keys_path);
     return true;
 }
