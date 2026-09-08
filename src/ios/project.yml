@@ -39,10 +39,15 @@ settings:
     # step (Boost::headers, a real umbrella INTERFACE target) successfully compiles
     # common/container/unordered_map.h's `#include <boost/unordered/unordered_flat_map.hpp>`
     # from this exact checkout, so the file does exist on disk; this is an Xcode/xcodegen
-    # glob-expansion gap for this one library, not a missing submodule. Added explicitly
-    # rather than trying to guess a different recursive-glob shape that might have the
-    # same gap for some other library.
-    - '$(SRCROOT)/../../.cache/cpm/boost/boost-*/libs/unordered/include'
+    # glob-expansion gap for this one library, not a missing submodule.
+    #
+    # A first attempt at this used a `boost-*` mid-segment wildcard, but Xcode's
+    # HEADER_SEARCH_PATHS glob support only expands a trailing `/**` (whole-path
+    # recursive) -- a `*` embedded inside one path segment is NOT expanded and gets
+    # passed to clang as a literal, unmatchable `-I` flag (confirmed in a follow-up CI
+    # failure: the literal string "boost-*" showed up in the actual -I list). Hardcoded
+    # to the exact version cpmfile.json currently pins instead.
+    - '$(SRCROOT)/../../.cache/cpm/boost/boost-1.90.0/libs/unordered/include'
     # `boost` and `boost_headers` (CMakeLists.txt's fallback for when Boost::headers
     # isn't available via CPM, see its "really annoying" comment) are separate CPM
     # packages, cached under separate directories keyed by package name.
