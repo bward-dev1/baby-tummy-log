@@ -394,7 +394,7 @@ if (IOS)
     # static archive from that xcframework instead of a dylib.
     AddJsonPackage(moltenvk-ios)
 
-    set(MOLTENVK_LIBRARY "${moltenvk-ios_SOURCE_DIR}/MoltenVK/static/MoltenVK.xcframework/ios-arm64/libMoltenVK.a" CACHE STRING "" FORCE)
+    set(MOLTENVK_LIBRARY "${moltenvk-ios_SOURCE_DIR}/MoltenVK/MoltenVK/static/MoltenVK.xcframework/ios-arm64/libMoltenVK.a" CACHE STRING "" FORCE)
 elseif (APPLE)
     # moltenvk (macOS)
     if (NOT YUZU_USE_BUNDLED_MOLTENVK)
@@ -405,6 +405,6 @@ elseif (APPLE)
     if (NOT MOLTENVK_LIBRARY OR YUZU_USE_BUNDLED_MOLTENVK)
         AddJsonPackage(moltenvk)
 
-        set(MOLTENVK_LIBRARY "${moltenvk_SOURCE_DIR}/MoltenVK/dylib/macOS/libMoltenVK.dylib" CACHE STRING "" FORCE)
+        set(MOLTENVK_LIBRARY "${moltenvk_SOURCE_DIR}/MoltenVK/MoltenVK/dylib/macOS/libMoltenVK.dylib" CACHE STRING "" FORCE)
     endif()
 endif()
