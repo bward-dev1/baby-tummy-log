@@ -75,12 +75,14 @@ void GameController::Shutdown() {
     }
 
     for (auto& [port, handle] : connected_controllers) {
+        (void)port;
         GCController* controller = (__bridge_transfer GCController*)handle;
         controller.extendedGamepad.valueChangedHandler = nil;
     }
     connected_controllers.clear();
 
     for (auto& [port, handle] : value_handlers) {
+        (void)port;
         // Release the retained block copy; the handler itself was already cleared above.
         id block = (__bridge_transfer id)handle;
         (void)block;
@@ -149,8 +151,8 @@ void GameController::OnControllerConnected(void* gc_controller) {
     controller.extendedGamepad.valueChangedHandler = handler;
     value_handlers[port] = (__bridge_retained void*)handler;
 
-    LOG_INFO(Input, "GameController connected on port {}: {}", port,
-             [controller.vendorName UTF8String] ?: "unknown");
+    const char* vendor_name = controller.vendorName != nil ? [controller.vendorName UTF8String] : "unknown";
+    LOG_INFO(Input, "GameController connected on port {}: {}", port, vendor_name);
 }
 
 void GameController::OnControllerDisconnected(void* gc_controller) {
