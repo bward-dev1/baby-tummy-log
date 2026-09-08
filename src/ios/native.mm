@@ -171,10 +171,16 @@ Core::SystemResultStatus EmulationSession::InitializeEmulation(const std::string
 
     // TODO(ios): SetFrontendAppletSet is intentionally NOT called here -- Android's
     // populates the Software Keyboard / Web Browser slots with AndroidKeyboard /
-    // AndroidWebBrowser, JNI-backed implementations with no iOS equivalent yet. Leaving
-    // every slot unset (rather than fabricating a fake non-null applet) is the honest
-    // interim state; it's unverified whether Core has a defined no-applet fallback or
-    // whether this will need addressing before any title that invokes an applet can run.
+    // AndroidWebBrowser, JNI-backed implementations with no iOS equivalent yet. This is
+    // safe to leave unset, not just "the honest interim state": Core::System::Impl::
+    // Initialize() (core/core.cpp) already calls FrontendAppletHolder::
+    // SetDefaultAppletsIfMissing() for every slot the frontend never filled in, and
+    // DefaultSoftwareKeyboardApplet (core/frontend/applets/software_keyboard.cpp) never
+    // crashes -- ShowNormalKeyboard just auto-submits a fixed string via the normal
+    // callback, everything else is a LOG_WARNING stub. A title that invokes the software
+    // keyboard applet will get that default behavior rather than a real on-screen
+    // keyboard, which is a real UX gap once there's a UI to wire an iOS one into, but not
+    // a crash risk.
 
     ConfigureFilesystemProvider(filepath);
 
