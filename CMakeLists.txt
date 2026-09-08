@@ -156,6 +156,10 @@ if (IOS)
     set(fmt_FORCE_BUNDLED ON)
     set(SPIRV-Headers_FORCE_BUNDLED ON)
     set(zstd_FORCE_BUNDLED ON)
+
+    # iOS's sandbox doesn't support USB host access via IOKit, and the
+    # iPhoneOS SDK lacks the IOUSBLib APIs libusb's darwin backend needs.
+    set(ENABLE_LIBUSB OFF)
 endif()
 
 if (MSVC AND ARCHITECTURE_x86)
