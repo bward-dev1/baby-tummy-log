@@ -27,7 +27,13 @@
 #include <sys/random.h>
 #elif defined(__APPLE__)
 #include <sys/types.h>
+#include <TargetConditionals.h>
+#if TARGET_OS_OSX
+// <sys/random.h> only ships on the macOS SDK; the iOS/tvOS/watchOS SDKs
+// don't have it (getentropy() there is declared in <unistd.h> instead).
+// Nothing in this file actually uses it, so just skip it off-macOS.
 #include <sys/random.h>
+#endif
 #include <mach/vm_map.h>
 #include <mach/mach.h>
 #elif defined(__FreeBSD__)
