@@ -10,6 +10,23 @@
 
 #include <boost/asio.hpp>
 #include <boost/version.hpp>
+
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+// Boost::process isn't built for iOS (libs/process/src/shell.cpp calls
+// wordexp()/wordfree(), unavailable in the iOS sandbox; see the IOS branch
+// in the top-level CMakeLists.txt). signal_pipe below only needs a
+// same-process wakeup channel, so use a plain OS pipe wrapped in
+// boost::asio::posix::stream_descriptor instead of boost::process::async_pipe.
+#define AETHEREMU_ASIO_SIGNAL_PIPE 1
+#include <boost/asio/posix/stream_descriptor.hpp>
+#include <stdexcept>
+#include <unistd.h>
+#else
+#define AETHEREMU_ASIO_SIGNAL_PIPE 0
 #if BOOST_VERSION > 108400 && (!defined(_WINDOWS) && !defined(__ANDROID__)) || defined(YUZU_BOOST_v1)
 #define USE_BOOST_v1
 #endif
@@ -17,6 +34,7 @@
 #include <boost/process/v1/async_pipe.hpp>
 #else
 #include <boost/process/async_pipe.hpp>
+#endif
 #endif
 
 #include "common/logging.h"
@@ -350,7 +368,49 @@ private:
     std::mutex connection_lock;
 
     struct ConnectionState {
-#ifdef USE_BOOST_v1
+#if AETHEREMU_ASIO_SIGNAL_PIPE
+        // Minimal stand-in for boost::process::async_pipe's read/write surface,
+        // backed by a real pipe(2) so no boost::process dependency is needed.
+        class SignalPipe {
+        public:
+            // Intentionally implicit: ConnectionState's constructor takes this
+            // by value and callers pass `io_context` directly, same as the
+            // boost::process::async_pipe(io_context&) constructor it replaces.
+            SignalPipe(boost::asio::io_context& io_context) {
+                int fds[2];
+                if (::pipe(fds) != 0) {
+                    throw std::runtime_error("SignalPipe: failed to create pipe");
+                }
+                read_end.emplace(io_context, fds[0]);
+                write_end.emplace(io_context, fds[1]);
+            }
+
+            template <typename MutableBufferSequence, typename Handler>
+            void async_read_some(const MutableBufferSequence& buffers, Handler&& handler) {
+                read_end->async_read_some(buffers, std::forward<Handler>(handler));
+            }
+
+            template <typename ConstBufferSequence>
+            size_t write_some(const ConstBufferSequence& buffers) {
+                return write_end->write_some(buffers);
+            }
+
+            void close() {
+                boost::system::error_code ec;
+                if (read_end) {
+                    read_end->close(ec);
+                }
+                if (write_end) {
+                    write_end->close(ec);
+                }
+            }
+
+        private:
+            std::optional<boost::asio::posix::stream_descriptor> read_end;
+            std::optional<boost::asio::posix::stream_descriptor> write_end;
+        };
+        using async_pipe = SignalPipe;
+#elif defined(USE_BOOST_v1)
         using async_pipe = boost::process::v1::async_pipe;
 #else
         using async_pipe = boost::process::async_pipe;
