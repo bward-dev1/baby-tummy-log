@@ -28,35 +28,25 @@ settings:
   # through CMake.
   HEADER_SEARCH_PATHS:
     - '$(SRCROOT)/..'
-    # CPMUtil.cmake's AddPackage flow passes an explicit SOURCE_DIR already under
-    # .cache/cpm/... into FetchContent_Declare, so CPM-managed packages never land under
-    # the default <binary_dir>/_deps/<name>-src path -- confirmed by reading that CMake
-    # logic, not guessed (there is no build/_deps/boost-src to find).
-    - '$(SRCROOT)/../../.cache/cpm/boost/**'
-    # The recursive glob above found libs/unordered (confirmed present in a failed
-    # build's actual -I list) but NOT libs/unordered/include specifically, even though
-    # other libraries' /include subdirectories were found fine -- and the CMake "Build"
-    # step (Boost::headers, a real umbrella INTERFACE target) successfully compiles
-    # common/container/unordered_map.h's `#include <boost/unordered/unordered_flat_map.hpp>`
-    # from this exact checkout, so the file does exist on disk; this is an Xcode/xcodegen
-    # glob-expansion gap for this one library, not a missing submodule.
-    #
-    # A first attempt at this used a `boost-*` mid-segment wildcard, but Xcode's
-    # HEADER_SEARCH_PATHS glob support only expands a trailing `/**` (whole-path
-    # recursive) -- a `*` embedded inside one path segment is NOT expanded and gets
-    # passed to clang as a literal, unmatchable `-I` flag (confirmed in a follow-up CI
-    # failure: the literal string "boost-*" showed up in the actual -I list). Hardcoded
-    # to the exact version cpmfile.json currently pins instead.
-    - '$(SRCROOT)/../../.cache/cpm/boost/boost-1.90.0/libs/unordered/include'
-    # `boost` and `boost_headers` (CMakeLists.txt's fallback for when Boost::headers
-    # isn't available via CPM, see its "really annoying" comment) are separate CPM
-    # packages, cached under separate directories keyed by package name.
-    - '$(SRCROOT)/../../.cache/cpm/boost_headers/**'
   # Static libs already built by `cmake --build build --config Release` (core,
   # video_core, audio_core, aetheremu-ios, every bundled CPM dependency) -- see
   # ci/generate-link-flags.sh's header comment for why full paths in a response file
   # rather than -l<name> + LIBRARY_SEARCH_PATHS.
   OTHER_LDFLAGS: '@$(SRCROOT)/link-flags.txt $(inherited) -lc++'
+  # Boost is vendored as a full boostorg/boost superproject checkout under
+  # .cache/cpm/boost (CPMUtil.cmake's AddPackage flow passes an explicit SOURCE_DIR
+  # there rather than the default <binary_dir>/_deps/<name>-src path -- confirmed by
+  # reading that CMake logic, not guessed), with each of its ~150 sublibraries'
+  # headers under its own libs/<name>/include/ directory. A HEADER_SEARCH_PATHS
+  # recursive glob (`.../boost/**`) repeatedly missed individual libraries'
+  # include/ subdirectories even though their parent library directory was found --
+  # confirmed against real CI failures for boost/unordered/... and then
+  # boost/throw_exception.hpp in turn, the same pattern each time, meaning more of
+  # this codebase's boost dependencies were likely one whack-a-mole CI round-trip
+  # away from the same failure. Generated as a response file instead (mirrors
+  # OTHER_LDFLAGS's link-flags.txt above, for the same reason: `find` has none of
+  # Xcode's glob limitations).
+  OTHER_CPLUSPLUSFLAGS: '@$(SRCROOT)/boost-include-flags.txt $(inherited)'
   GENERATE_INFOPLIST_FILE: 'YES'
   INFOPLIST_FILE: 'Info-Extra.plist'
   MARKETING_VERSION: '0.1.0'
@@ -89,6 +79,11 @@ targets:
           "$SRCROOT/../../ci/generate-link-flags.sh" "$SRCROOT/link-flags.txt"
         outputFiles:
           - "$SRCROOT/link-flags.txt"
+      - name: Generate boost include response file
+        script: |
+          "$SRCROOT/../../ci/generate-boost-include-flags.sh" "$SRCROOT/boost-include-flags.txt"
+        outputFiles:
+          - "$SRCROOT/boost-include-flags.txt"
 
     scheme:
       gatherCoverageData: false
