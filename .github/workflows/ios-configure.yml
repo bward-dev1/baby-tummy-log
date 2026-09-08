@@ -49,3 +49,15 @@ jobs:
           path: |
             build/CMakeFiles/CMakeError.log
             build/CMakeFiles/CMakeOutput.log
+
+      - name: Build
+        run: |
+          set -o pipefail
+          cmake --build build --config Release 2>&1 | tee build.log
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
