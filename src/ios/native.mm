@@ -16,8 +16,17 @@
 // VMA_IMPLEMENTATION). native.mm is EmulationSession's own translation unit and the
 // sole iOS entry point, so this is the correct (and only) place for it on this
 // platform, mirroring the other platforms' pattern exactly.
+//
+// The pragma push/pop around this is load-bearing, not decorative: src/CMakeLists.txt's
+// ENABLE_WERROR block turns -Wunused (among others) into a hard error project-wide, and
+// vk_mem_alloc.h's own implementation section has a handful of genuinely unused
+// variables in its third-party source -- a real CI failure caught this too, once the
+// missing-VMA_IMPLEMENTATION fix above got far enough to actually compile this header.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-variable"
 #define VMA_IMPLEMENTATION
 #include "video_core/vulkan_common/vma.h"
+#pragma clang diagnostic pop
 
 #include "ios/native.h"
 
