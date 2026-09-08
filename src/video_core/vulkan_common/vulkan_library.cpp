@@ -11,6 +11,10 @@
 #include "common/logging.h"
 #include "video_core/vulkan_common/vulkan_library.h"
 
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+
 namespace Vulkan {
 
 std::shared_ptr<Common::DynamicLibrary> OpenLibrary(
@@ -22,10 +26,20 @@ std::shared_ptr<Common::DynamicLibrary> OpenLibrary(
 #else
     auto library = std::make_shared<Common::DynamicLibrary>();
 #ifdef __APPLE__
+#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+    // iOS .app bundles are flat: embedded frameworks live directly under
+    // <bundle>.app/Frameworks/, unlike the Contents/Frameworks/ layout of a
+    // macOS .app bundle.
+    const auto libvulkan_filename =
+        Common::FS::GetBundleDirectory() / "Frameworks/libvulkan.1.dylib";
+    const auto libmoltenvk_filename =
+        Common::FS::GetBundleDirectory() / "Frameworks/libMoltenVK.dylib";
+#else
     const auto libvulkan_filename =
         Common::FS::GetBundleDirectory() / "Contents/Frameworks/libvulkan.1.dylib";
     const auto libmoltenvk_filename =
         Common::FS::GetBundleDirectory() / "Contents/Frameworks/libMoltenVK.dylib";
+#endif
     const char* library_paths[] = {std::getenv("LIBVULKAN_PATH"), libvulkan_filename.c_str(),
                                    libmoltenvk_filename.c_str()};
     // Check if a path to a specific Vulkan library has been specified.
