@@ -31,9 +31,12 @@ typedef NS_ENUM(NSInteger, AetherLoadResult) {
 /// outlive the layer it points to -- see AetherBridge.mm's AetherNativeSurface comment.
 - (void)detachMetalLayer;
 
-/// Loads a game image (NSP/XCI/NCA) from an already security-scoped-accessible path
-/// and starts emulation on a background thread. Returns immediately.
-- (AetherLoadResult)loadGameAtPath:(NSString *)path;
+/// Loads a game image (NSP/XCI/NCA) from an already security-scoped-accessible path and
+/// starts emulation on a background thread. `completion` is called on the main queue once
+/// the real outcome is known (EmulationSession::OnEmulationStarted, or immediately if
+/// InitializeEmulation itself fails) -- callers that hold a security-scoped resource open
+/// for `path` must keep it open until `completion` runs, not just until this method returns.
+- (void)loadGameAtPath:(NSString *)path completion:(void (^)(AetherLoadResult result))completion;
 
 /// Forwards a touch-down event. `x`/`y` must be in the CAMetalLayer's pixel space
 /// (i.e. view-point coords already multiplied by contentScaleFactor), matching the

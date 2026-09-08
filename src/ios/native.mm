@@ -271,15 +271,31 @@ void EmulationSession::RunEmulation() {
     }
 }
 
-// TODO(ios): Android notifies the Kotlin frontend via a JNI static-method callback here.
-// There's no JNI on this platform -- the equivalent will be a C function pointer /
-// block callback registered by the Swift/ObjC app layer, or a delegate protocol, once
-// that app layer exists.
+void EmulationSession::SetStateCallback(StateCallback callback) {
+    std::scoped_lock lock(m_mutex);
+    m_state_callback = std::move(callback);
+}
+
+// Android notifies the Kotlin frontend via a JNI static-method callback here. There's no
+// JNI on this platform -- AetherBridge registers a StateCallback (see native.h) that wraps
+// this back into a completion block for loadGameAtPath:completion:.
+//
+// NOTE(ios): m_state_callback is read here without m_mutex, unlike SetStateCallback's
+// locked write -- both InitializeEmulation and ShutdownEmulation already hold m_mutex when
+// they call this, so taking it again here would deadlock. In practice SetStateCallback is
+// only ever called once, from AetherBridge's -init, before any load can happen, so this is
+// a narrow/theoretical race rather than a live one; revisit if a callback re-registration
+// path is ever added.
 void EmulationSession::OnEmulationStarted() {
-    LOG_INFO(Frontend, "EmulationSession::OnEmulationStarted (stub, no frontend callback wired)");
+    LOG_INFO(Frontend, "EmulationSession::OnEmulationStarted");
+    if (m_state_callback) {
+        m_state_callback(true, Core::SystemResultStatus::Success);
+    }
 }
 
 void EmulationSession::OnEmulationStopped(Core::SystemResultStatus result) {
-    LOG_INFO(Frontend, "EmulationSession::OnEmulationStopped (stub, no frontend callback wired): {}",
-              static_cast<int>(result));
+    LOG_INFO(Frontend, "EmulationSession::OnEmulationStopped: {}", static_cast<int>(result));
+    if (m_state_callback) {
+        m_state_callback(false, result);
+    }
 }

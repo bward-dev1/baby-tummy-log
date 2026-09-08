@@ -28,6 +28,11 @@
     AetherNativeSurface _surface;
     os_unfair_lock _surfaceLock;
     dispatch_queue_t _emulationQueue;
+    // Set by loadGameAtPath:completion: just before dispatching the load, cleared and
+    // invoked (on the main queue) by the StateCallback registered below once the real
+    // outcome is known. Read/written only on _emulationQueue or synchronously before a
+    // dispatch_async onto it, so dispatch's own memory barrier is enough -- no extra lock.
+    void (^_pendingLoadCompletion)(AetherLoadResult);
 }
 
 + (instancetype)shared {
@@ -44,6 +49,32 @@
     if (self) {
         _emulationQueue = dispatch_queue_create("dev.aetheremu.emulation", DISPATCH_QUEUE_SERIAL);
         _surfaceLock = OS_UNFAIR_LOCK_INIT;
+
+        // EmulationSession::OnEmulationStarted fires (synchronously, on _emulationQueue)
+        // once InitializeEmulation actually succeeds -- this replaces the old
+        // "loadGameAtPath: reports success optimistically" behavior with the real outcome.
+        // OnEmulationStopped also routes here (e.g. a later HaltEmulation-driven teardown),
+        // but by then _pendingLoadCompletion is already nil from the started callback, so
+        // it's a harmless no-op in that case.
+        __weak AetherBridge *weakSelf = self;
+        EmulationSession::GetInstance().SetStateCallback(
+            [weakSelf](bool /*success*/, Core::SystemResultStatus result) {
+              AetherBridge *strongSelf = weakSelf;
+              if (strongSelf == nil) {
+                  return;
+              }
+              void (^completion)(AetherLoadResult) = strongSelf->_pendingLoadCompletion;
+              strongSelf->_pendingLoadCompletion = nil;
+              if (completion == nil) {
+                  return;
+              }
+              const AetherLoadResult load_result = result == Core::SystemResultStatus::Success
+                                                       ? AetherLoadResultSuccess
+                                                       : AetherLoadResultFailure;
+              dispatch_async(dispatch_get_main_queue(), ^{
+                completion(load_result);
+              });
+            });
     }
     return self;
 }
@@ -72,8 +103,9 @@
     EmulationSession::GetInstance().SurfaceChanged();
 }
 
-- (AetherLoadResult)loadGameAtPath:(NSString *)path {
+- (void)loadGameAtPath:(NSString *)path completion:(void (^)(AetherLoadResult result))completion {
     std::string cpath = std::string([path UTF8String]);
+    _pendingLoadCompletion = [completion copy];
 
     // TODO(ios): InitializeEmulation is currently a best-effort, untested implementation
     // (see native.mm) -- calling it on the emulation queue rather than the caller's
@@ -90,17 +122,25 @@
       auto &session = EmulationSession::GetInstance();
       const auto result = session.InitializeEmulation(cpath);
       if (result == Core::SystemResultStatus::Success) {
+          // Blocks this queue for the rest of the emulation session (see RunEmulation's
+          // own comment) -- OnEmulationStarted has already fired (synchronously, inside
+          // InitializeEmulation above) and resolved _pendingLoadCompletion by the time
+          // control reaches here, so nothing below this line needs to touch it.
           session.RunEmulation();
       } else {
           NSLog(@"[AetherBridge] InitializeEmulation failed: %d", static_cast<int>(result));
+          // InitializeEmulation returns early on failure without calling
+          // OnEmulationStarted/OnEmulationStopped (see native.mm), so the state callback
+          // never fires for this path -- resolve the completion directly instead.
+          void (^failureCompletion)(AetherLoadResult) = self->_pendingLoadCompletion;
+          self->_pendingLoadCompletion = nil;
+          if (failureCompletion != nil) {
+              dispatch_async(dispatch_get_main_queue(), ^{
+                failureCompletion(AetherLoadResultFailure);
+              });
+          }
       }
     });
-
-    // Real success/failure is only known after the async load above completes --
-    // there's no callback wired yet (EmulationSession::OnEmulationStarted/Stopped are
-    // still stub logging, see native.mm). Report optimistically for now; a future pass
-    // should thread a completion block through instead of returning eagerly.
-    return AetherLoadResultSuccess;
 }
 
 // TODO(ios): untested, no CI oracle available -- mirrors Android's native_input.cpp

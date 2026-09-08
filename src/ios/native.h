@@ -8,6 +8,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -75,10 +76,19 @@ public:
 
     Core::SystemResultStatus InitializeEmulation(const std::string& filepath);
 
-    static void OnEmulationStarted();
+    // Fired from OnEmulationStarted/OnEmulationStopped below -- the frontend (AetherBridge)
+    // registers one of these to learn the real outcome of a load, replacing the old
+    // "report success optimistically before the async load even runs" behavior. Runs
+    // synchronously on whatever thread InitializeEmulation/ShutdownEmulation is running on
+    // (the bridge's serial emulation queue) -- callers that touch UI must hop to the main
+    // queue themselves rather than assume this fires there.
+    using StateCallback = std::function<void(bool success, Core::SystemResultStatus result)>;
+    void SetStateCallback(StateCallback callback);
+
+    void OnEmulationStarted();
 
 private:
-    static void OnEmulationStopped(Core::SystemResultStatus result);
+    void OnEmulationStopped(Core::SystemResultStatus result);
 
 private:
     // Window management
@@ -100,6 +110,7 @@ private:
     std::atomic<bool> m_is_running = false;
     std::atomic<bool> m_is_paused = false;
     std::unique_ptr<FileSys::ManualContentProvider> m_manual_provider;
+    StateCallback m_state_callback;
 
     // GPU driver parameters
     std::shared_ptr<Common::DynamicLibrary> m_vulkan_library;

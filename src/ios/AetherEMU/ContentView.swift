@@ -174,18 +174,25 @@ struct ContentView: View {
         // access grant is required before the C++ side can open the path -- see
         // AetherBridge.mm's TODO on filepath handling going through NSURL bookmarks for
         // the longer-term (re-open-without-repicking) story.
+        //
+        // loadGameAtPath:completion:'s load runs asynchronously on a background queue and
+        // only resolves once EmulationSession has actually opened the file (or failed to),
+        // so the security-scoped grant must stay open until that completion fires -- a
+        // `defer` here would release it the instant this function returns, before the
+        // async load even starts reading.
         guard game.path.startAccessingSecurityScopedResource() else {
             lastError = "Couldn't access \(game.title)."
             return
         }
-        defer { game.path.stopAccessingSecurityScopedResource() }
 
-        let result = AetherBridge.shared().loadGame(atPath: game.path.path)
-        if result == .success {
-            isRunning = true
-            lastError = nil
-        } else {
-            lastError = "Failed to load \(game.title)."
+        AetherBridge.shared().loadGame(atPath: game.path.path) { result in
+            game.path.stopAccessingSecurityScopedResource()
+            if result == .success {
+                self.isRunning = true
+                self.lastError = nil
+            } else {
+                self.lastError = "Failed to load \(game.title)."
+            }
         }
     }
 }
