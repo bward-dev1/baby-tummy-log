@@ -32,7 +32,20 @@ settings:
   # video_core, audio_core, aetheremu-ios, every bundled CPM dependency) -- see
   # ci/generate-link-flags.sh's header comment for why full paths in a response file
   # rather than -l<name> + LIBRARY_SEARCH_PATHS.
-  OTHER_LDFLAGS: '@$(SRCROOT)/link-flags.txt $(inherited) -lc++'
+  #
+  # The explicit -framework flags below are real, CI-confirmed missing frameworks --
+  # CMakeLists.txt's PLATFORM_LIBRARIES (Metal, UIKit, CoreVideo, CoreMedia, Security,
+  # UniformTypeIdentifiers, Foundation) only affects targets CMake itself links (none of
+  # which is a final executable -- aetheremu-ios and its dependencies are all static
+  # libraries), so it never reaches Xcode's separate app-target link at all; nothing
+  # here previously declared iOS-only frameworks these libraries actually call into
+  # (cubeb's AudioQueue backend needs AudioToolbox; video_core's camera backend needs
+  # AVFoundation and (surprisingly, since it wasn't in PLATFORM_LIBRARIES either)
+  # CoreMotion; CoreBluetooth for BT controller discovery; and CoreHaptics/GameController
+  # for this session's own new game_controller.mm). CoreMedia is listed again here even
+  # though it's also in PLATFORM_LIBRARIES, for the same "Xcode's link doesn't see
+  # CMake's" reason.
+  OTHER_LDFLAGS: '@$(SRCROOT)/link-flags.txt $(inherited) -lc++ -framework AVFoundation -framework AudioToolbox -framework CoreBluetooth -framework CoreHaptics -framework CoreMedia -framework CoreMotion -framework GameController'
   # Every CPM dependency's include/ directory (boost, fmt, zstd, SPIRV-Headers, ...) --
   # a hand-rolled HEADER_SEARCH_PATHS glob for these repeatedly missed individual
   # libraries (boost/unordered/..., then boost/throw_exception.hpp, then fmt entirely),
