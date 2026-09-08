@@ -314,7 +314,15 @@ if(EXISTS ${PROJECT_SOURCE_DIR}/hooks/pre-commit AND NOT EXISTS ${PROJECT_SOURCE
     endif()
 endif()
 
-if (ARCHITECTURE_arm64 AND (ANDROID OR LINUX OR IOS))
+# NCE ("Native Code Execution") is a Linux-specific mechanism: arm_nce_asm_definitions.h
+# includes <asm-generic/signal.h>/<asm-generic/unistd.h> (Linux UAPI kernel headers,
+# not present on any other OS) and its SIGUSR2/SIGURG/TPIDR_EL0-offset scheme mirrors
+# Linux's own ARM64 ucontext/TLS layout specifically. An earlier pass here added IOS to
+# this condition on the theory that omitting it left iOS defaulting to JIT unconditionally
+# -- backwards: omitting IOS is what correctly leaves the interpreter as the iOS fallback
+# (see HAS_NCE's other iOS-conditioned framework-linking guard above), and enabling this
+# doesn't compile on iOS at all, let alone run. Reverted to Android/Linux only.
+if (ARCHITECTURE_arm64 AND (ANDROID OR LINUX))
     set(HAS_NCE 1)
     add_compile_definitions(HAS_NCE=1)
 endif()
