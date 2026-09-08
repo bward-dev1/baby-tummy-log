@@ -47,6 +47,17 @@ final class MetalHostView: UIView {
             // gone -- see AetherBridge.mm's AetherNativeSurface comment.
             AetherBridge.shared().detachMetalLayer()
         } else {
+            // An adversarial review pass caught this: on a fresh attach, this fires
+            // before layoutSubviews ever runs, so metalLayer.drawableSize is still
+            // CGSize.zero (init only sets pixelFormat/framebufferOnly) -- OnSurfaceChanged
+            // would read that zero size into m_window_width/m_window_height with no
+            // guard. layoutSubviews always follows and re-attaches with the real size, so
+            // this was self-correcting, but setting drawableSize here too (same formula
+            // as layoutSubviews) avoids the transient zero-size window entirely.
+            metalLayer.drawableSize = CGSize(
+                width: bounds.width * contentScaleFactor,
+                height: bounds.height * contentScaleFactor
+            )
             AetherBridge.shared().attachMetalLayer(metalLayer)
         }
     }
