@@ -32,6 +32,7 @@
 
 #include <chrono>
 #include <utility>
+#include <unistd.h>
 
 #include "common/fs/fs.h"
 #include "common/fs/path_util.h"
@@ -63,11 +64,34 @@ EmulationSession& EmulationSession::GetInstance() {
     return s_instance;
 }
 
+// ptrace() is excluded from the public iOS SDK headers (sys/ptrace.h isn't importable
+// on this platform) but the symbol is real and present in libSystem -- declared here
+// directly, same as every other jailbreak-less-JIT tool that uses this technique.
+extern "C" int ptrace(int request, pid_t pid, caddr_t addr, int data);
+
 void EmulationSession::InitializeApplication(const std::string& app_support_dir) {
     if (m_app_initialized) {
         return;
     }
     m_app_initialized = true;
+
+    // Self-ptrace JIT-enablement trick, found by inspecting a real shipped sibling
+    // project's binary (Sudachi v0.0.1.7 -- `strings` on its executable turned up
+    // "parent pid is not launchd, calling ptrace(PT_TRACE_ME)" plus the literal
+    // ptrace(PT_TRACE_ME, ...) call in their fork of this same jit_code_memory.cpp file
+    // this project also has, inherited unmodified from upstream). PT_TRACE_ME (request 0)
+    // marks this process as being traced, which is how a normal launch (parent IS
+    // launchd, pid 1) differs from being launched through a JIT-enabling tool
+    // (SideStore/AltStore's "Enable JIT" relaunch spawns the app itself as a direct
+    // child, giving it an unusual parent) -- get-task-allow alone does not set
+    // CS_DEBUGGED on an ordinary SpringBoard launch; only an actual debugger attach or
+    // an unusual parent process does. This is a no-op under a normal launch and only
+    // takes effect when launched through such a tool -- still unconfirmed whether it
+    // actually flips mmap(MAP_JIT) from failing to succeeding here (see "JIT status" in
+    // STATUS.md), but it's cheap, safe, and testable, so it runs unconditionally.
+    if (getppid() != 1) {
+        ptrace(0 /* PT_TRACE_ME */, 0, nullptr, 0);
+    }
 
     // Points every Common::FS::EdenPath (keys, NAND, saves, logs, ...) at the real
     // sandboxed directory the caller chose (see path_util.cpp's TARGET_OS_IOS branch --
@@ -87,6 +111,8 @@ void EmulationSession::InitializeApplication(const std::string& app_support_dir)
 
     LOG_INFO(Frontend, "EmulationSession::InitializeApplication: app_support_dir={}",
               app_support_dir);
+    LOG_INFO(Frontend, "EmulationSession::InitializeApplication: parent_pid={} (launchd=1); {}",
+              getppid(), getppid() != 1 ? "called ptrace(PT_TRACE_ME)" : "normal launch, ptrace not attempted");
 }
 
 const Core::System& EmulationSession::System() const {
