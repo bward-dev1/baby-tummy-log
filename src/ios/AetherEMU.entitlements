@@ -2,33 +2,39 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- These declare intent for MAP_JIT; they are not a confirmed way to get JIT
-	     working on iOS. get-task-allow / CS_DEBUGGED (set by sideloading tools like
-	     SideStore/AltStore via a momentary debugger attach at launch) is necessary but
-	     may not be sufficient on its own for mmap(MAP_JIT) to succeed -- see
-	     cemu-ios-muffin's Cemu.entitlements for the fuller writeup of this same open
-	     question on a sibling project (their own device test: CS_DEBUGGED set,
-	     mprotect(R+X) succeeded, but mmap(MAP_JIT) still refused with errno 22).
-	     Whether this does anything depends on how whatever tool signs/re-signs this app
-	     handles entitlement injection, which this repo doesn't control.
+	<!-- CORRECTED 2026-09-08 after extracting and inspecting a real shipped sibling
+	     project's IPA (Sudachi v0.0.1.7, another yuzu-derived iOS Switch emulator,
+	     GPL-licensed like this one -- codesign -d --entitlements against its actual
+	     binary, not documentation or a guess): its ENTIRE entitlements set is
+	     get-task-allow + the two kernel.* keys below (plus auto-injected
+	     application-identifier/team-identifier). It has NO allow-jit, NO
+	     disable-executable-page-protection, NO dynamic-codesigning entitlement at all.
 
-	     CORRECTION: an earlier version of this comment claimed HAS_NCE being off meant
-	     "the interpreter (JIT-less) path is what actually runs on iOS regardless" --
-	     that was wrong and should not be trusted. CpuBackend only has two values
-	     (settings_enums.h: Dynarmic, Nce) and Dynarmic is a JIT recompiler with no
-	     interpreter mode in this codebase -- see the top-level CMakeLists.txt's HAS_NCE
-	     comment for the detail. With HAS_NCE off, Dynarmic (JIT) is the ONLY CPU backend
-	     iOS has. These entitlements are therefore load-bearing, not aspirational: if
-	     mmap(MAP_JIT) doesn't work under whatever signs this app, no guest code runs at
-	     all on iOS today, full stop. This is the actual top-priority open problem for
-	     this project, not a nice-to-have -- see STATUS.md. -->
+	     Those three keys this file previously carried are macOS Hardened Runtime
+	     entitlements (com.apple.security.cs.*) -- they have no defined meaning on iOS
+	     and were very likely doing nothing here, cargo-culted from macOS guidance.
+	     Removed. get-task-allow is what actually matters: it's what a development/
+	     ad-hoc-signed build (Xcode direct-to-device, or a sideloading tool's re-sign)
+	     carries, and it's what makes the kernel treat the process as debuggable
+	     (CS_DEBUGGED), which is the real, if still only partially confirmed, path to
+	     mmap(MAP_JIT) succeeding on iOS -- see cemu-ios-muffin's own device test
+	     (CS_DEBUGGED set, mprotect(R+X) succeeded, mmap(MAP_JIT) still refused with
+	     errno 22) for the caveat that CS_DEBUGGED alone has been insufficient
+	     elsewhere. Added the two kernel entitlements Sudachi's real profile carries --
+	     extended-virtual-addressing and increased-memory-limit -- since a Switch
+	     emulator's large guest-address-space mappings are a plausible reason a
+	     memory-mapping call could fail independent of the JIT question entirely, and
+	     this project didn't have them before.
+
+	     Still true: whether any of this actually works depends on how whatever tool
+	     signs/re-signs this app handles entitlement injection, which this repo doesn't
+	     control, and this remains the top-priority open, device-only-testable question
+	     for this project -- see STATUS.md. -->
 	<key>get-task-allow</key>
 	<true/>
-	<key>com.apple.security.cs.allow-jit</key>
+	<key>com.apple.developer.kernel.extended-virtual-addressing</key>
 	<true/>
-	<key>com.apple.security.cs.disable-executable-page-protection</key>
-	<true/>
-	<key>dynamic-codesigning</key>
+	<key>com.apple.developer.kernel.increased-memory-limit</key>
 	<true/>
 </dict>
 </plist>
