@@ -15,5 +15,21 @@
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
+
+	<!-- Declares real MFi/PS/Xbox controller support to iOS -- found missing here by
+	     comparing against a real shipped sibling project's Info.plist (Sudachi
+	     v0.0.1.7). Doesn't change whether InputCommon::GameController itself works, but
+	     it's what iOS uses to decide things like Control Center's controller-status UI
+	     and some pairing behavior; harmless and correct to declare since real controller
+	     support already exists (src/input_common/drivers/game_controller.mm). -->
+	<key>GCSupportsControllerUserInteraction</key>
+	<true/>
+	<key>GCSupportedGameControllers</key>
+	<array>
+		<dict>
+			<key>ProfileName</key>
+			<string>ExtendedGamepad</string>
+		</dict>
+	</array>
 </dict>
 </plist>
